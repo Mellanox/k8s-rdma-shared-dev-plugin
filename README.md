@@ -2,10 +2,17 @@
 
 This is simple rdma device plugin that support IB and RoCE SRIOV vHCA.
 This also support DPDK applications for Mellanox NICs.
+This plugin runs as daemonset.
+Its container image is available at mellanox/rdma-sriov-dev-plugin.
 
 ## How to
 
-**1.** Create ConfigMap
+**1.** Create per node sriov configuration
+
+Edit rdma-example/rdma-sriov-node-config.yaml to describe sriov PF netdevice.
+In this example it is eth0 and eth1.
+
+**2.** Create ConfigMap
 
 Create config map which holds SRIOV netdevice information.
 This is per node configuration.
@@ -15,13 +22,13 @@ In below example, they are eth0 and eth1 in rdma-sriov-node-config.yaml.
 kubectl create -f rdma-example/rdma-sriov-node-config.yaml
 ```
 
-**2.** Deploy device plugin
+**3.** Deploy device plugin
 
 ```
 kubectl create -f device-plugin.yaml
 ```
 
-**3.** Create Test pod
+**4.** Create Test pod
 
 Create test pod which requests 1 vhca resource.
 ```
