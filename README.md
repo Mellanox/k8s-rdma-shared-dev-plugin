@@ -11,6 +11,10 @@ Its container image is available at mellanox/rdma-sriov-dev-plugin.
 
 Edit rdma-example/rdma-sriov-node-config.yaml to describe sriov PF netdevice.
 In this example it is eth0 and eth1.
+Do not add any VFs.
+
+Do not enable SRIOV manually. This plugin enables SRIOV for a given PF and
+does necessary configuration for IB and RoCE link layers.
 
 **2.** Create ConfigMap
 
