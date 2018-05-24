@@ -21,7 +21,7 @@ spec:
       - key: CriticalAddonsOnly
         operator: Exists
       containers:
-      - image: mellanox/rdma-sriov-dev-plugin
+      - image: mellanox/k8s-rdma-sriov-dev-plugin
         name: k8s-rdma-sriov-dp-ctr
         imagePullPolicy: IfNotPresent
         securityContext:
