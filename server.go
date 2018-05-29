@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
 	"github.com/Mellanox/sriovnet"
@@ -20,6 +21,8 @@ const (
 
 const (
 	RdmaSriovResourceName = "rdma/vhca"
+	RdmaHcaResourceName   = "rdma/hca"
+	RdmaHcaMaxResources   = 1000
 )
 
 const (
@@ -27,11 +30,12 @@ const (
 )
 
 type UserConfig struct {
+	Mode         string   `json:"mode"`
 	PfNetdevices []string `json:"pfNetdevices"`
 }
 
-// RdmaSriovDevPlugin implements the Kubernetes device plugin API
-type RdmaSriovDevPlugin struct {
+// RdmaDevPlugin implements the Kubernetes device plugin API
+type RdmaDevPlugin struct {
 	resourceName string
 	socket       string
 	devs         []*pluginapi.Device
@@ -64,10 +68,12 @@ func configSriov(pfNetdevName string) (*sriovnet.PfNetdevHandle, error) {
 	return pfHandle, err
 }
 
-// NewRdmaSriovDevPlugin returns an initialized RdmaSriovDevPlugin
-func NewRdmaSriovDevPlugin(config UserConfig) *RdmaSriovDevPlugin {
+// NewRdmaSriovDevPlugin returns an initialized RdmaDevPlugin
+func NewRdmaSriovDevPlugin(config UserConfig) *RdmaDevPlugin {
 
 	var devs = []*pluginapi.Device{}
+
+	log.Println("sriov device mode")
 
 	if len(config.PfNetdevices) == 0 {
 		fmt.Println("Error: empty or invalid pf netdevice configuration")
@@ -91,8 +97,35 @@ func NewRdmaSriovDevPlugin(config UserConfig) *RdmaSriovDevPlugin {
 		}
 	}
 
-	return &RdmaSriovDevPlugin{
+	return &RdmaDevPlugin{
 		resourceName: RdmaSriovResourceName,
+		socket:       pluginapi.DevicePluginPath + RdmaSriovDpSocket,
+
+		devs: devs,
+
+		stop:   make(chan interface{}),
+		health: make(chan *pluginapi.Device),
+	}
+}
+
+// NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
+func NewRdmaSharedDevPlugin(config UserConfig) *RdmaDevPlugin {
+
+	var devs = []*pluginapi.Device{}
+
+	log.Println("shared hca mode")
+
+	for n := 0; n < RdmaHcaMaxResources; n++ {
+		id := n
+		dpDevice := &pluginapi.Device{
+			ID:     strconv.Itoa(id),
+			Health: pluginapi.Healthy,
+		}
+		devs = append(devs, dpDevice)
+	}
+
+	return &RdmaDevPlugin{
+		resourceName: RdmaHcaResourceName,
 		socket:       pluginapi.DevicePluginPath + RdmaSriovDpSocket,
 
 		devs: devs,
@@ -119,7 +152,7 @@ func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error
 }
 
 // Start starts the gRPC server of the device plugin
-func (m *RdmaSriovDevPlugin) Start() error {
+func (m *RdmaDevPlugin) Start() error {
 	err := m.cleanup()
 	if err != nil {
 		return err
@@ -148,7 +181,7 @@ func (m *RdmaSriovDevPlugin) Start() error {
 }
 
 // Stop stops the gRPC server
-func (m *RdmaSriovDevPlugin) Stop() error {
+func (m *RdmaDevPlugin) Stop() error {
 	if m.server == nil {
 		return nil
 	}
@@ -161,7 +194,7 @@ func (m *RdmaSriovDevPlugin) Stop() error {
 }
 
 // Register registers the device plugin for the given resourceName with Kubelet.
-func (m *RdmaSriovDevPlugin) Register(kubeletEndpoint, resourceName string) error {
+func (m *RdmaDevPlugin) Register(kubeletEndpoint, resourceName string) error {
 	conn, err := dial(kubeletEndpoint, 5*time.Second)
 	if err != nil {
 		return err
@@ -183,7 +216,7 @@ func (m *RdmaSriovDevPlugin) Register(kubeletEndpoint, resourceName string) erro
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (m *RdmaSriovDevPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+func (m *RdmaDevPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	fmt.Println("exposing devices: ", m.devs)
 	s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
 
@@ -199,12 +232,12 @@ func (m *RdmaSriovDevPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.Device
 	}
 }
 
-func (m *RdmaSriovDevPlugin) unhealthy(dev *pluginapi.Device) {
+func (m *RdmaDevPlugin) unhealthy(dev *pluginapi.Device) {
 	m.health <- dev
 }
 
 // Allocate which return list of devices.
-func (m *RdmaSriovDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
@@ -229,17 +262,17 @@ func (m *RdmaSriovDevPlugin) Allocate(ctx context.Context, r *pluginapi.Allocate
 	return &response, nil
 }
 
-func (m *RdmaSriovDevPlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
+func (m *RdmaDevPlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
 	}, nil
 }
 
-func (m *RdmaSriovDevPlugin) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
+func (m *RdmaDevPlugin) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-func (m *RdmaSriovDevPlugin) cleanup() error {
+func (m *RdmaDevPlugin) cleanup() error {
 	if err := os.Remove(m.socket); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -248,7 +281,7 @@ func (m *RdmaSriovDevPlugin) cleanup() error {
 }
 
 // Serve starts the gRPC server and register the device plugin to Kubelet
-func (m *RdmaSriovDevPlugin) Serve() error {
+func (m *RdmaDevPlugin) Serve() error {
 	err := m.Start()
 	if err != nil {
 		log.Printf("Could not start device plugin: %s", err)

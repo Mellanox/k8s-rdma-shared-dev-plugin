@@ -48,7 +48,7 @@ func main() {
 	log.Println("loaded config: ", string(s))
 
 	restart := true
-	var devPlugin *RdmaSriovDevPlugin
+	var devPlugin *RdmaDevPlugin
 
 L:
 	for {
@@ -56,8 +56,14 @@ L:
 			if devPlugin != nil {
 				devPlugin.Stop()
 			}
-
-			devPlugin = NewRdmaSriovDevPlugin(config)
+			switch config.Mode {
+			case "sriov":
+				devPlugin = NewRdmaSriovDevPlugin(config)
+			case "hca":
+				devPlugin = NewRdmaSharedDevPlugin(config)
+			default:
+				devPlugin = NewRdmaSharedDevPlugin(config)
+			}
 			if err := devPlugin.Serve(); err != nil {
 				log.Println("Could not contact Kubelet, retrying. Did you enable the device plugin feature gate?")
 			} else {
