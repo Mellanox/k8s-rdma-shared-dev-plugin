@@ -1,7 +1,7 @@
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
-  name: rdma-sriov-dp-daemonset
+  name: rdma-sriov-dp-ds
   namespace: kube-system
 spec:
   template:
@@ -12,7 +12,7 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
       labels:
-        name: rdma-sriov-dp-daemonset
+        name: rdma-sriov-dp-ds
     spec:
       hostNetwork: true
       tolerations:
@@ -22,7 +22,7 @@ spec:
         operator: Exists
       containers:
       - image: mellanox/k8s-rdma-sriov-dev-plugin
-        name: k8s-rdma-sriov-dp-ctr
+        name: k8s-rdma-sriov-dp-ds
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true

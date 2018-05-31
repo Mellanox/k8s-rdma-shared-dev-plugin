@@ -6,9 +6,6 @@ metadata:
 data:
   config.json: |
     {
-        "mode": "sriov",
-        "pfNetdevices": [
-                "eth0",
-                "eth1"
-        ]
+        "mode" : "sriov",
+        "pfNetdevices": [ "eth0" , "eth1" ]
     }

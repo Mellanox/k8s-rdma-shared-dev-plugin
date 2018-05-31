@@ -9,10 +9,10 @@ spec:
     name: mofed-test-ctr
     resources:
       limits:
-        rdma/vhca: 1
+        rdma/hca: 1
     command:
     - sh
     - -c
     - |
-      ls -l /dev/infiniband
+      ls -l /dev/infiniband /sys/class/net
       sleep 1000000
