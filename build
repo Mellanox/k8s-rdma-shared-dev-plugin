@@ -1,0 +1,82 @@
+#!/bin/bash
+
+VALID_CMDS=(make push manifest)
+
+GIT_VER=$(git rev-list -1 HEAD)
+ARCH=$(uname -m)
+
+IMAGE_NAME=k8s-rdma-sriov-dev-plugin
+ARCH_IMAGE=mellanox/$IMAGE_NAME:$ARCH
+LATEST_IMAGE=mellanox/$IMAGE_NAME:latest
+input_cmd=make
+
+function usage_help()
+{
+	echo "./build [COMMAND]"
+	echo "Examples:"
+	echo "./build make            To build the image"
+	echo "./build push            To push image to hub.docker.com"
+	echo "./build manifest        Modify and push manifest to hub.docker.com"
+}
+
+function check_for_help()
+{
+	case $1 in
+	        "-h" | "--help")
+	                usage_help
+	                exit 0
+	                ;;
+	esac
+}
+
+function validate_input_cmd()
+{
+	valid_cmd="make"
+	in_cmd=$1
+	for n in "${VALID_CMDS[@]}"; do
+		if [ "$in_cmd" = "$n" ]; then
+			valid_cmd=$in_cmd
+		fi
+	done
+
+	if [ -z $valid_cmd ]; then
+		echo "Given command $in_cmd is invalid"
+		usage_help
+		exit 1
+	fi
+}
+
+function execute_cmd()
+{
+	case "$input_cmd" in
+	"make")
+		echo "Building image: $ARCH_IMAGE"
+		docker build . -t $ARCH_IMAGE
+	;;
+	"push")
+		echo "Pushing images"
+		docker push $ARCH_IMAGE
+	;;
+	"manifest")
+		echo "Pushing images"
+		docker manifest create mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 mellanox/$IMAGE_NAME:ppc64le
+		docker manifest create --amend mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 mellanox/$IMAGE_NAME:ppc64le
+		docker manifest annotate mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 --os linux --arch amd64
+		docker manifest annotate mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:ppc64le --os linux --arch ppc64le
+		docker manifest push mellanox/$IMAGE_NAME -p
+	;;
+	esac
+}
+
+check_for_help $1
+
+validate_input_cmd $1
+
+if [ $# -lt 1 ]; then
+	input_cmd=make
+else
+	input_cmd=$1
+fi
+
+execute_cmd
+
