@@ -6,6 +6,5 @@ metadata:
 data:
   config.json: |
     {
-        "mode" : "hca",
-        "pfNetdevices": [ "eno1" ]
+        "mode" : "hca"
     }
