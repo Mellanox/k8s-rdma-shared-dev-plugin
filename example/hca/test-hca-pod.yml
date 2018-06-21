@@ -7,6 +7,9 @@ spec:
   containers:
   - image: mellanox/centos_7_4_mofed_4_2_1_2_0_0_60
     name: mofed-test-ctr
+    securityContext:
+      capabilities:
+        add: [ "IPC_LOCK" ]
     resources:
       limits:
         rdma/hca: 1
