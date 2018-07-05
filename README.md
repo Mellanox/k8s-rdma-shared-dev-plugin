@@ -1,10 +1,10 @@
 # k8s-rdma-sriov-dev-plugin
-(https://hub.docker.com/r/mellanox/k8s-rdma-sriov-dev-plugin)
+(https://hub.docker.com/r/rdma/k8s-rdma-sriov-dev-plugin)
 
 This is simple rdma device plugin that support IB and RoCE SRIOV vHCA and HCA.
 This also support DPDK applications for Mellanox NICs.
 This plugin runs as daemonset.
-Its container image is available at mellanox/k8s-rdma-sriov-dev-plugin.
+Its container image is available at rdma/k8s-rdma-sriov-dev-plugin.
 
 # How to use SRIOV mode?
 

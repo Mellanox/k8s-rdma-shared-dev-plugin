@@ -6,8 +6,8 @@ GIT_VER=$(git rev-list -1 HEAD)
 ARCH=$(uname -m)
 
 IMAGE_NAME=k8s-rdma-sriov-dev-plugin
-ARCH_IMAGE=mellanox/$IMAGE_NAME:$ARCH
-LATEST_IMAGE=mellanox/$IMAGE_NAME:latest
+ARCH_IMAGE=rdma/$IMAGE_NAME:$ARCH
+LATEST_IMAGE=rdma/$IMAGE_NAME:latest
 input_cmd=make
 
 function usage_help()
@@ -59,11 +59,11 @@ function execute_cmd()
 	;;
 	"manifest")
 		echo "Pushing images"
-		docker manifest create mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 mellanox/$IMAGE_NAME:ppc64le
-		docker manifest create --amend mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 mellanox/$IMAGE_NAME:ppc64le
-		docker manifest annotate mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:x86_64 --os linux --arch amd64
-		docker manifest annotate mellanox/$IMAGE_NAME mellanox/$IMAGE_NAME:ppc64le --os linux --arch ppc64le
-		docker manifest push mellanox/$IMAGE_NAME -p
+		docker manifest create rdma/$IMAGE_NAME rdma/$IMAGE_NAME:x86_64 rdma/$IMAGE_NAME:ppc64le
+		docker manifest create --amend rdma/$IMAGE_NAME rdma/$IMAGE_NAME:x86_64 rdma/$IMAGE_NAME:ppc64le
+		docker manifest annotate rdma/$IMAGE_NAME rdma/$IMAGE_NAME:x86_64 --os linux --arch amd64
+		docker manifest annotate rdma/$IMAGE_NAME rdma/$IMAGE_NAME:ppc64le --os linux --arch ppc64le
+		docker manifest push rdma/$IMAGE_NAME -p
 	;;
 	esac
 }
