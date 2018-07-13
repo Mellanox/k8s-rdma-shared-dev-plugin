@@ -5,7 +5,7 @@ metadata:
 spec:
   restartPolicy: OnFailure
   containers:
-  - image: mellanox/centos_7_4_mofed_4_2_1_2_0_0_60
+  - image: mellanox/mlnx_ofed_linux-4.4-1.0.0.0-centos7.4
     name: mofed-test-ctr
     securityContext:
       capabilities:
