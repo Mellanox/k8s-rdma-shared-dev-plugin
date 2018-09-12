@@ -44,10 +44,9 @@ kubectl create -f example/sriov/test-sriov-pod.yaml
 
 # How to use HCA mode?
 
-**1.** Create per node hca configuration
+**1.** Use CNI plugin such as Contiv, Calico, Cluster
 
-Edit example/hca/rdma-hca-node-config.yaml to describe sriov PF netdevice(s).
-In this example it is eth0 and eth1.
+Make sure to configure ib0 or appropriate IPoIB netdevice as the parent netdevice for creating overlay/virtual netdevices.
 
 **2.** Create ConfigMap
 
@@ -70,4 +69,3 @@ Create test pod which requests 1 vhca resource.
 ```
 kubectl create -f example/hca/test-hca-pod.yaml
 ```
-
