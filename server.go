@@ -86,10 +86,8 @@ func NewRdmaSriovDevPlugin(config UserConfig) *RdmaDevPlugin {
 				continue
 			}
 			for _, vf := range pfHandle.List {
-				vfNetdevName := sriovnet.GetVfNetdevName(pfHandle, vf)
-				id, _ := sriovnet.GetVfDefaultMacAddr(vfNetdevName)
 				dpDevice := &pluginapi.Device{
-					ID:     id,
+					ID:     vf.PciAddress,
 					Health: pluginapi.Healthy,
 				}
 				devs = append(devs, dpDevice)
