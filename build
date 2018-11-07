@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VALID_CMDS=(make push manifest)
+VALID_CMDS=(image push manifest local)
 
 GIT_VER=$(git rev-list -1 HEAD)
 ARCH=$(uname -m)
@@ -8,13 +8,14 @@ ARCH=$(uname -m)
 IMAGE_NAME=k8s-rdma-sriov-dev-plugin
 ARCH_IMAGE=rdma/$IMAGE_NAME:$ARCH
 LATEST_IMAGE=rdma/$IMAGE_NAME:latest
-input_cmd=make
+input_cmd=image
 
 function usage_help()
 {
 	echo "./build [COMMAND]"
 	echo "Examples:"
-	echo "./build make            To build the image"
+	echo "./build image           To build the image"
+	echo "./build local           To build the binary without container image"
 	echo "./build push            To push image to hub.docker.com"
 	echo "./build manifest        Modify and push manifest to hub.docker.com"
 }
@@ -31,7 +32,7 @@ function check_for_help()
 
 function validate_input_cmd()
 {
-	valid_cmd="make"
+	valid_cmd="image"
 	in_cmd=$1
 	for n in "${VALID_CMDS[@]}"; do
 		if [ "$in_cmd" = "$n" ]; then
@@ -49,7 +50,7 @@ function validate_input_cmd()
 function execute_cmd()
 {
 	case "$input_cmd" in
-	"make")
+	"image")
 		echo "Building image: $ARCH_IMAGE"
 		docker build . -t $ARCH_IMAGE
 	;;
@@ -57,6 +58,22 @@ function execute_cmd()
 		echo "Pushing images"
 		docker push $ARCH_IMAGE
 	;;
+	"local")
+		echo "Building binary"
+		mkdir -p "${PWD}/gopath"
+		export GOPATH=${PWD}/gopath
+		export PATH=$PATH:$GOPATH/bin
+		go get github.com/golang/dep/cmd/dep
+		mkdir -p "${PWD}/gopath/src/k8s-rdma-sriov-dev-plugin"
+		cp -rf *.go ${PWD}/gopath/src/k8s-rdma-sriov-dev-plugin
+		cp -rf Gopkg.* ${PWD}/gopath/src/k8s-rdma-sriov-dev-plugin
+		CUR_DIR=${PWD}
+		cd ${PWD}/gopath/src/k8s-rdma-sriov-dev-plugin
+		dep ensure -v -vendor-only
+		CGO_ENABLED=0 go build -a -ldflags '-extldflags "-static"' -o bin/k8s-rdma-sriov-dp .
+		cd  ${CUR_DIR}
+	;;
+
 	"manifest")
 		echo "Pushing images"
 		docker manifest create rdma/$IMAGE_NAME rdma/$IMAGE_NAME:x86_64 rdma/$IMAGE_NAME:ppc64le
@@ -73,10 +90,9 @@ check_for_help $1
 validate_input_cmd $1
 
 if [ $# -lt 1 ]; then
-	input_cmd=make
+	input_cmd=image
 else
 	input_cmd=$1
 fi
 
 execute_cmd
-
