@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 VALID_CMDS=(image push manifest local)
 
 GIT_VER=$(git rev-list -1 HEAD)
