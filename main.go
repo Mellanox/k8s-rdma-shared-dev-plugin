@@ -56,7 +56,11 @@ L:
 			if devPlugin != nil {
 				devPlugin.Stop()
 			}
-			devPlugin = NewRdmaSharedDevPlugin(config)
+			devPlugin, err = NewRdmaSharedDevPlugin(config)
+			if err != nil {
+				log.Println(err.Error())
+				os.Exit(1)
+			}
 			if err := devPlugin.Serve(); err != nil {
 				log.Println("Could not contact Kubelet, retrying. Did you enable the device plugin feature gate?")
 			} else {

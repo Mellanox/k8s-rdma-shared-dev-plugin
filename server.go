@@ -19,8 +19,7 @@ const (
 )
 
 const (
-	RdmaHcaResourceName   = "rdma/hca"
-	RdmaHcaMaxResources   = 1000
+	RdmaHcaResourceName = "rdma/hca"
 )
 
 const (
@@ -28,6 +27,7 @@ const (
 )
 
 type UserConfig struct {
+	RdmaHcaMax int `json:"rdmaHcaMax"`
 }
 
 // RdmaDevPlugin implements the Kubernetes device plugin API
@@ -43,13 +43,17 @@ type RdmaDevPlugin struct {
 }
 
 // NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
-func NewRdmaSharedDevPlugin(config UserConfig) *RdmaDevPlugin {
+func NewRdmaSharedDevPlugin(config UserConfig) (*RdmaDevPlugin, error) {
 
 	var devs = []*pluginapi.Device{}
 
 	log.Println("shared hca mode")
 
-	for n := 0; n < RdmaHcaMaxResources; n++ {
+	if config.RdmaHcaMax < 0 {
+		return nil, fmt.Errorf("Error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
+	}
+
+	for n := 0; n < config.RdmaHcaMax; n++ {
 		id := n
 		dpDevice := &pluginapi.Device{
 			ID:     strconv.Itoa(id),
@@ -66,7 +70,7 @@ func NewRdmaSharedDevPlugin(config UserConfig) *RdmaDevPlugin {
 
 		stop:   make(chan interface{}),
 		health: make(chan *pluginapi.Device),
-	}
+	}, nil
 }
 
 // dial establishes the gRPC communication with the registered device plugin.

@@ -6,4 +6,5 @@ metadata:
 data:
   config.json: |
     {
+        "rdmaHcaMax" : 1000
     }
