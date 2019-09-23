@@ -3,7 +3,7 @@ This readme file is for the developers.
 1. How to build a device plugin binary image?
 
 #./build local
-This builds local binary in gopath/src/k8s-rdma-sriov-dev-plugin/bin/k8s-rdma-sriov-dp
+This builds local binary in gopath/src/k8s-rdma-shared-dev-plugin/bin/k8s-rdma-shared-dp
 
 2. How to create container image.
 Once above build is done, do

@@ -16,7 +16,7 @@ DOCKER2MACHINEARCH[ppc64le]=ppc64le
 GIT_VER=$(git rev-list -1 HEAD)
 
 MACHINE_ARCH=$(uname -m)
-IMAGE_NAME=k8s-rdma-sriov-dev-plugin
+IMAGE_NAME=k8s-rdma-shared-dev-plugin
 REPO_NAME=rdma
 input_cmd=""
 
@@ -77,7 +77,7 @@ function build_local()
 	CUR_DIR=${PWD}
 	cd ${PWD}/gopath/src/$IMAGE_NAME
 	ln -s ${CUR_DIR}/vendor vendor
-	CGO_ENABLED=0 GOARCH=$ARCH go build -a -ldflags '-extldflags "-static"' -o ${CUR_DIR}/bin/k8s-rdma-sriov-dp .
+	CGO_ENABLED=0 GOARCH=$ARCH go build -a -ldflags '-extldflags "-static"' -o ${CUR_DIR}/bin/k8s-rdma-shared-dp .
 	cd  ${CUR_DIR}
 	rm -rf gopath
 	echo "Finished building binary successfully"

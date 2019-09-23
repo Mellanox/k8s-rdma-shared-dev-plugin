@@ -9,18 +9,16 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Mellanox/sriovnet"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 )
 
 const (
-	RdmaSriovDpSocket = "rdma-sriov-dp.sock"
+	RdmaSharedDpSocket = "rdma-shared-dp.sock"
 )
 
 const (
-	RdmaSriovResourceName = "rdma/vhca"
 	RdmaHcaResourceName   = "rdma/hca"
 	RdmaHcaMaxResources   = 1000
 )
@@ -30,8 +28,6 @@ const (
 )
 
 type UserConfig struct {
-	Mode         string   `json:"mode"`
-	PfNetdevices []string `json:"pfNetdevices"`
 }
 
 // RdmaDevPlugin implements the Kubernetes device plugin API
@@ -44,66 +40,6 @@ type RdmaDevPlugin struct {
 	health chan *pluginapi.Device
 
 	server *grpc.Server
-}
-
-func configSriov(pfNetdevName string) (*sriovnet.PfNetdevHandle, error) {
-	var err error
-
-	err = sriovnet.EnableSriov(pfNetdevName)
-	if err != nil {
-		fmt.Println("Fail to enable sriov for netdev =", pfNetdevName)
-		return nil, err
-	}
-	pfHandle, err := sriovnet.GetPfNetdevHandle(pfNetdevName)
-	if err != nil {
-		fmt.Println("Fail to get Pf handle for netdev =", pfNetdevName)
-		return nil, err
-	}
-
-	err = sriovnet.ConfigVfs(pfHandle, true)
-	if err != nil {
-		fmt.Println("Fail to config vfs for ndev =", pfNetdevName)
-		return nil, err
-	}
-	return pfHandle, err
-}
-
-// NewRdmaSriovDevPlugin returns an initialized RdmaDevPlugin
-func NewRdmaSriovDevPlugin(config UserConfig) *RdmaDevPlugin {
-
-	var devs = []*pluginapi.Device{}
-
-	log.Println("sriov device mode")
-
-	if len(config.PfNetdevices) == 0 {
-		fmt.Println("Error: empty or invalid pf netdevice configuration")
-	} else {
-		for _, ndev := range config.PfNetdevices {
-			fmt.Println("Configuring SRIOV on ndev=", ndev, len(ndev))
-			pfHandle, err2 := configSriov(ndev)
-			if err2 != nil {
-				fmt.Println("Fail to configure sriov; error = ", err2)
-				continue
-			}
-			for _, vf := range pfHandle.List {
-				dpDevice := &pluginapi.Device{
-					ID:     vf.PciAddress,
-					Health: pluginapi.Healthy,
-				}
-				devs = append(devs, dpDevice)
-			}
-		}
-	}
-
-	return &RdmaDevPlugin{
-		resourceName: RdmaSriovResourceName,
-		socket:       pluginapi.DevicePluginPath + RdmaSriovDpSocket,
-
-		devs: devs,
-
-		stop:   make(chan interface{}),
-		health: make(chan *pluginapi.Device),
-	}
 }
 
 // NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
@@ -124,7 +60,7 @@ func NewRdmaSharedDevPlugin(config UserConfig) *RdmaDevPlugin {
 
 	return &RdmaDevPlugin{
 		resourceName: RdmaHcaResourceName,
-		socket:       pluginapi.DevicePluginPath + RdmaSriovDpSocket,
+		socket:       pluginapi.DevicePluginPath + RdmaSharedDpSocket,
 
 		devs: devs,
 

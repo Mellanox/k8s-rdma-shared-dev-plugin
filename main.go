@@ -13,15 +13,15 @@ import (
 )
 
 const (
-	ConfigFilePath = "/k8s-rdma-sriov-dev-plugin/config.json"
+	ConfigFilePath = "/k8s-rdma-shared-dev-plugin/config.json"
 )
 
 const (
-	RdmaSriovDpVersion = "0.2"
+	RdmaSharedDpVersion = "0.2"
 )
 
 func main() {
-	log.Println("Starting K8s RDMA SRIOV Device Plugin version=", RdmaSriovDpVersion)
+	log.Println("Starting K8s RDMA Shared Device Plugin version=", RdmaSharedDpVersion)
 
 	log.Println("Starting FS watcher.")
 	watcher, err := newFSWatcher(pluginapi.DevicePluginPath)
@@ -56,14 +56,7 @@ L:
 			if devPlugin != nil {
 				devPlugin.Stop()
 			}
-			switch config.Mode {
-			case "sriov":
-				devPlugin = NewRdmaSriovDevPlugin(config)
-			case "hca":
-				devPlugin = NewRdmaSharedDevPlugin(config)
-			default:
-				devPlugin = NewRdmaSharedDevPlugin(config)
-			}
+			devPlugin = NewRdmaSharedDevPlugin(config)
 			if err := devPlugin.Serve(); err != nil {
 				log.Println("Could not contact Kubelet, retrying. Did you enable the device plugin feature gate?")
 			} else {

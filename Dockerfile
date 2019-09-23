@@ -1,5 +1,5 @@
 FROM debian:stretch-slim
 
-ADD /bin/k8s-rdma-sriov-dp /bin/k8s-rdma-sriov-dp
+ADD /bin/k8s-rdma-shared-dp /bin/k8s-rdma-shared-dp
 
-CMD ["/bin/k8s-rdma-sriov-dp"]
+CMD ["/bin/k8s-rdma-shared-dp"]

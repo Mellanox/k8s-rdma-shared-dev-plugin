@@ -1,7 +1,7 @@
 apiVersion: extensions/v1beta1
 kind: DaemonSet
 metadata:
-  name: rdma-sriov-dp-ds
+  name: rdma-shared-dp-ds
   namespace: kube-system
 spec:
   template:
@@ -12,7 +12,7 @@ spec:
       annotations:
         scheduler.alpha.kubernetes.io/critical-pod: ""
       labels:
-        name: rdma-sriov-dp-ds
+        name: rdma-shared-dp-ds
     spec:
       hostNetwork: true
       tolerations:
@@ -21,8 +21,8 @@ spec:
       - key: CriticalAddonsOnly
         operator: Exists
       containers:
-      - image: rdma/k8s-rdma-sriov-dev-plugin
-        name: k8s-rdma-sriov-dp-ds
+      - image: rdma/k8s-rdma-shared-dev-plugin
+        name: k8s-rdma-shared-dp-ds
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
@@ -30,7 +30,7 @@ spec:
           - name: device-plugin
             mountPath: /var/lib/kubelet/device-plugins
           - name: config
-            mountPath: /k8s-rdma-sriov-dev-plugin
+            mountPath: /k8s-rdma-shared-dev-plugin
       volumes:
         - name: device-plugin
           hostPath:
