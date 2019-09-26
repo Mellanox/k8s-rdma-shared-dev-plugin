@@ -2,50 +2,29 @@ package main
 
 import (
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"log"
 	"net"
 	"os"
-	"path"
+	"path/filepath"
 	"strconv"
 	"time"
 
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
-)
-
-const (
-	RdmaSharedDpSocket = "rdma-shared-dp.sock"
-)
-
-const (
-	RdmaHcaResourceName = "rdma/hca"
+	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 )
 
 const (
 	RdmaDevices = "/dev/infiniband"
 )
 
-type UserConfig struct {
-	RdmaHcaMax int `json:"rdmaHcaMax"`
-}
-
-// RdmaDevPlugin implements the Kubernetes device plugin API
-type RdmaDevPlugin struct {
-	resourceName string
-	socket       string
-	devs         []*pluginapi.Device
-
-	stop   chan interface{}
-	health chan *pluginapi.Device
-
-	server *grpc.Server
-}
-
 // NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
 func NewRdmaSharedDevPlugin(config UserConfig) (*RdmaDevPlugin, error) {
 
 	var devs = []*pluginapi.Device{}
+	var sockDir string
 
 	log.Println("shared hca mode")
 
@@ -62,15 +41,32 @@ func NewRdmaSharedDevPlugin(config UserConfig) (*RdmaDevPlugin, error) {
 		devs = append(devs, dpDevice)
 	}
 
+	watcherMode := detectPluginWatchMode(SockDir)
+	if watcherMode {
+		fmt.Println("Using Kuelet Plugin Registry Mode")
+		sockDir = SockDir
+	} else {
+		fmt.Println("Using Deprecated Devie Plugin Registry Path")
+		sockDir = DeprecatedSockDir
+	}
+
 	return &RdmaDevPlugin{
 		resourceName: RdmaHcaResourceName,
-		socket:       pluginapi.DevicePluginPath + RdmaSharedDpSocket,
-
-		devs: devs,
-
-		stop:   make(chan interface{}),
-		health: make(chan *pluginapi.Device),
+		socketPath:   filepath.Join(sockDir, RdmaSharedDpSocket),
+		socketName:   RdmaSharedDpSocket,
+		watchMode:    watcherMode,
+		devs:         devs,
+		stop:         make(chan interface{}),
+		stopWatcher:  make(chan bool),
+		health:       make(chan *pluginapi.Device),
 	}, nil
+}
+
+func detectPluginWatchMode(sockDir string) bool {
+	if _, err := os.Stat(sockDir); err != nil {
+		return false
+	}
+	return true
 }
 
 // dial establishes the gRPC communication with the registered device plugin.
@@ -96,22 +92,34 @@ func (m *RdmaDevPlugin) Start() error {
 		return err
 	}
 
-	sock, err := net.Listen("unix", m.socket)
+	sock, err := net.Listen("unix", m.socketPath)
 	if err != nil {
 		return err
 	}
 
 	m.server = grpc.NewServer([]grpc.ServerOption{}...)
+
+	if m.watchMode {
+		registerapi.RegisterRegistrationServer(m.server, m)
+	}
 	pluginapi.RegisterDevicePluginServer(m.server, m)
 
 	go m.server.Serve(sock)
 
 	// Wait for server to start by launching a blocking connexion
-	conn, err := dial(m.socket, 5*time.Second)
+	conn, err := dial(m.socketPath, 5*time.Second)
 	if err != nil {
 		return err
 	}
 	conn.Close()
+
+	if !m.watchMode {
+		if err = m.register(); err != nil {
+			m.server.Stop()
+			log.Fatal(err)
+			return err
+		}
+	}
 
 	// go m.healthcheck()
 
@@ -126,13 +134,54 @@ func (m *RdmaDevPlugin) Stop() error {
 
 	m.server.Stop()
 	m.server = nil
+	if !m.watchMode {
+		m.stopWatcher <- true
+	}
 	close(m.stop)
 
 	return m.cleanup()
 }
 
+func (m *RdmaDevPlugin) Restart() error {
+	if err := m.Stop(); err != nil {
+		return err
+	}
+	return m.Start()
+}
+
+func (m *RdmaDevPlugin) Watch() {
+	log.Println("Starting FS watcher.")
+	watcher, err := newFSWatcher(DeprecatedSockDir)
+	if err != nil {
+		log.Println("Failed to created FS watcher.")
+		os.Exit(1)
+	}
+	defer watcher.Close()
+
+	select {
+	case event := <-watcher.Events:
+		if event.Name == m.socketPath && event.Op&fsnotify.Create == fsnotify.Create {
+			log.Printf("inotify: %s created, restarting.", m.socketPath)
+			if err = m.Restart(); err != nil {
+				log.Fatalf("unable to restart server %v", err)
+			}
+		}
+
+	case err := <-watcher.Errors:
+		log.Printf("inotify: %s", err)
+
+	case stop := <-m.stopWatcher:
+		if stop {
+			log.Println("kubelet watcher stopped")
+			watcher.Close()
+			return
+		}
+	}
+}
+
 // Register registers the device plugin for the given resourceName with Kubelet.
-func (m *RdmaDevPlugin) Register(kubeletEndpoint, resourceName string) error {
+func (m *RdmaDevPlugin) register() error {
+	kubeletEndpoint := filepath.Join(DeprecatedSockDir, KubeEndPoint)
 	conn, err := dial(kubeletEndpoint, 5*time.Second)
 	if err != nil {
 		return err
@@ -142,8 +191,8 @@ func (m *RdmaDevPlugin) Register(kubeletEndpoint, resourceName string) error {
 	client := pluginapi.NewRegistrationClient(conn)
 	reqt := &pluginapi.RegisterRequest{
 		Version:      pluginapi.Version,
-		Endpoint:     path.Base(m.socket),
-		ResourceName: resourceName,
+		Endpoint:     m.socketName,
+		ResourceName: m.resourceName,
 	}
 
 	_, err = client.Register(context.Background(), reqt)
@@ -211,29 +260,29 @@ func (m *RdmaDevPlugin) PreStartContainer(context.Context, *pluginapi.PreStartCo
 }
 
 func (m *RdmaDevPlugin) cleanup() error {
-	if err := os.Remove(m.socket); err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(m.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
 	return nil
 }
 
-// Serve starts the gRPC server and register the device plugin to Kubelet
-func (m *RdmaDevPlugin) Serve() error {
-	err := m.Start()
-	if err != nil {
-		log.Printf("Could not start device plugin: %s", err)
-		return err
+func (m *RdmaDevPlugin) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
+	pluginInfoResponse := &registerapi.PluginInfo{
+		Type:              registerapi.DevicePlugin,
+		Name:              RdmaHcaResourceName,
+		Endpoint:          filepath.Join(SockDir, m.socketName),
+		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
-	log.Println("Starting to serve on", m.socket)
+	return pluginInfoResponse, nil
+}
 
-	err = m.Register(pluginapi.KubeletSocket, m.resourceName)
-	if err != nil {
-		log.Printf("Could not register device plugin: %s", err)
-		m.Stop()
-		return err
+func (m *RdmaDevPlugin) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
+	if regstat.PluginRegistered {
+		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)
+	} else {
+		log.Printf("%s failed to be registered at Kubelet: %v; restarting.\n", m.socketName, regstat.Error)
+		m.server.Stop()
 	}
-	log.Println("Registered device plugin with Kubelet")
-
-	return nil
+	return &registerapi.RegistrationStatusResponse{}, nil
 }
