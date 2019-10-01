@@ -2,6 +2,14 @@
 
 
 [[projects]]
+  digest = "1:0b22ddfd57b5da3fef632a34e4edccc7f8db5c0ebc4fb1643e3b231a1fa2bb9e"
+  name = "github.com/Mellanox/rdmamap"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "7c3c4763a6ee6a4d624fe133135dc3a7c483111c"
+  source = "https://github.com/Mellanox/rdmamap.git"
+
+[[projects]]
   digest = "1:abeb38ade3f32a92943e5be54f55ed6d6e3b6602761d74b4aab4c9dd45c18abd"
   name = "github.com/fsnotify/fsnotify"
   packages = ["."]
@@ -35,6 +43,25 @@
   pruneopts = "UT"
   revision = "6c65a5562fc06764971b7c5d05c76c75e84bdbf7"
   version = "v1.3.2"
+
+[[projects]]
+  digest = "1:2d9d06cb9d46dacfdbb45f8575b39fc0126d083841a29d4fbf8d97708f43107e"
+  name = "github.com/vishvananda/netlink"
+  packages = [
+    ".",
+    "nl",
+  ]
+  pruneopts = "UT"
+  revision = "a2ad57a690f3caf3015351d2d6e1c0b95c349752"
+  version = "v1.0.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:b405c6b13f8f88fde0aab3e5c566554fc7c2c5579dc5de603a188d4e44db2712"
+  name = "github.com/vishvananda/netns"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "7109fa855b0ff1ebef7fbd2f6aa613e8db7cfbc0"
 
 [[projects]]
   branch = "release-branch.go1.10"
@@ -152,6 +179,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "github.com/Mellanox/rdmamap",
     "github.com/fsnotify/fsnotify",
     "golang.org/x/net/context",
     "google.golang.org/grpc",

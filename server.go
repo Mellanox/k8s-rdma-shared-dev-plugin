@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/Mellanox/rdmamap"
 	"github.com/fsnotify/fsnotify"
 	"log"
 	"net"
@@ -16,14 +17,11 @@ import (
 	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 )
 
-const (
-	RdmaDevices = "/dev/infiniband"
-)
-
 // NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
-func NewRdmaSharedDevPlugin(config UserConfig) (*RdmaDevPlugin, error) {
+func NewRdmaSharedDevPlugin(config *UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (*RdmaDevPlugin, error) {
 
 	var devs = []*pluginapi.Device{}
+	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
 	var sockDir string
 
 	log.Println("shared hca mode")
@@ -41,21 +39,34 @@ func NewRdmaSharedDevPlugin(config UserConfig) (*RdmaDevPlugin, error) {
 		devs = append(devs, dpDevice)
 	}
 
-	watcherMode := detectPluginWatchMode(SockDir)
+	for _, device := range config.Devices {
+		pciAddres, err := getPciAddress(device)
+		// Skip non existing devices
+		if err != nil {
+			continue
+		}
+		rdmaDeviceSpec := getRdmaDeviceSpec(pciAddres)
+		if len(rdmaDeviceSpec) == 0 {
+			log.Printf("Warning: non-Rdma Device %s\n", device)
+		}
+		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
+	}
+
 	if watcherMode {
-		fmt.Println("Using Kuelet Plugin Registry Mode")
 		sockDir = SockDir
 	} else {
-		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 		sockDir = DeprecatedSockDir
 	}
 
+	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
+
 	return &RdmaDevPlugin{
-		resourceName: RdmaHcaResourceName,
-		socketPath:   filepath.Join(sockDir, RdmaSharedDpSocket),
-		socketName:   RdmaSharedDpSocket,
+		resourceName: fmt.Sprintf("%s/%s", resourcePrefix, config.ResourceName),
+		socketName:   socketName,
+		socketPath:   filepath.Join(sockDir, socketName),
 		watchMode:    watcherMode,
 		devs:         devs,
+		deviceSpec:   deviceSpec,
 		stop:         make(chan interface{}),
 		stopWatcher:  make(chan bool),
 		health:       make(chan *pluginapi.Device),
@@ -83,6 +94,44 @@ func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error
 	}
 
 	return c, nil
+}
+
+func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
+	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
+	rdmaResources := rdmamap.GetRdmaDevicesForPcidev(pciAddress)
+	for _, resource := range rdmaResources {
+		resRdmaDevices := rdmamap.GetRdmaCharDevices(resource)
+		for _, rdmaDevice := range resRdmaDevices {
+			deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
+				HostPath:      rdmaDevice,
+				ContainerPath: rdmaDevice,
+				Permissions:   "rwm",
+			})
+		}
+	}
+
+	return deviceSpec
+}
+
+func getPciAddress(ifName string) (string, error) {
+	var pciAddress string
+	ifaceDir := fmt.Sprintf("/sys/class/net/%s/device", ifName)
+	dirInfo, err := os.Lstat(ifaceDir)
+	if err != nil {
+		return pciAddress, fmt.Errorf("can't get the symbolic link of the device %q: %v", ifName, err)
+	}
+
+	if (dirInfo.Mode() & os.ModeSymlink) == 0 {
+		return pciAddress, fmt.Errorf("no symbolic link for the device %q", ifName)
+	}
+
+	pciInfo, err := os.Readlink(ifaceDir)
+	if err != nil {
+		return pciAddress, fmt.Errorf("can't read the symbolic link of the device %q: %v", ifName, err)
+	}
+
+	pciAddress = pciInfo[9:]
+	return pciAddress, nil
 }
 
 // Start starts the gRPC server of the device plugin
@@ -230,14 +279,8 @@ func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReque
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
 
 	for i, _ := range r.GetContainerRequests() {
-		ds := make([]*pluginapi.DeviceSpec, 1)
-		ds[0] = &pluginapi.DeviceSpec{
-			HostPath:      RdmaDevices,
-			ContainerPath: RdmaDevices,
-			Permissions:   "rwm",
-		}
 		ress[i] = &pluginapi.ContainerAllocateResponse{
-			Devices: ds,
+			Devices: m.deviceSpec,
 		}
 	}
 
@@ -270,7 +313,7 @@ func (m *RdmaDevPlugin) cleanup() error {
 func (m *RdmaDevPlugin) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
-		Name:              RdmaHcaResourceName,
+		Name:              m.resourceName,
 		Endpoint:          filepath.Join(SockDir, m.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}

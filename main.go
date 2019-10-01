@@ -1,11 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
-	"os"
 	"syscall"
 )
 
@@ -20,36 +16,34 @@ const (
 func main() {
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", RdmaSharedDpVersion)
 
-	log.Println("Reading", ConfigFilePath)
-	raw, err := ioutil.ReadFile(ConfigFilePath)
-	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
+	rm := newResourceManager()
+
+	log.Println("resource manager reading configs")
+	if err := rm.ReadConfig(); err != nil {
+		log.Fatalln(err.Error())
 	}
 
-	var config UserConfig
-	if err = json.Unmarshal(raw, &config); err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
+	if len(rm.configList) < 1 {
+		log.Fatalln("no resource configuration; exiting")
 	}
 
-	s, _ := json.Marshal(config)
-	log.Println("loaded config: ", string(s))
-
-	devPlugin, err := NewRdmaSharedDevPlugin(config)
-	if err != nil {
-		log.Println(err.Error())
-		os.Exit(1)
-	}
-	if err := devPlugin.Start(); err != nil {
-		log.Println("Error: Could not contact Kubelet,", err.Error())
-		os.Exit(1)
+	if !rm.validConfigs() {
+		log.Fatalln("Exiting.. one or more invalid configuration(s) given")
 	}
 
-	if !devPlugin.watchMode {
-		go devPlugin.Watch()
+	log.Println("Initializing resource servers")
+	if err := rm.InitServers(); err != nil {
+		log.Fatalf("Error: initializing resource servers %v \n", err)
 	}
 
+	log.Println("Starting all servers...")
+	if err := rm.StartAllServers(); err != nil {
+		log.Fatalf("Error: starting resource servers %v\n", err.Error())
+	}
+
+	log.Println("All servers started.")
+
+	log.Println("Listening for term signals")
 	log.Println("Starting OS watcher.")
 	sigs := newOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -58,12 +52,12 @@ func main() {
 		switch s {
 		case syscall.SIGHUP:
 			log.Println("Received SIGHUP, restarting.")
-			if err = devPlugin.Restart(); err != nil {
+			if err := rm.RestartAllServers(); err != nil {
 				log.Fatalf("unable to restart server %v", err)
 			}
 		default:
 			log.Printf("Received signal \"%v\", shutting down.", s)
-			devPlugin.Stop()
+			rm.StopAllServers()
 			return
 		}
 	}

@@ -12,7 +12,7 @@ spec:
         add: [ "IPC_LOCK" ]
     resources:
       limits:
-        rdma/hca: 1
+        rdma/hca_shared_devices_a: 1
     command:
     - sh
     - -c

@@ -6,5 +6,15 @@ metadata:
 data:
   config.json: |
     {
-        "rdmaHcaMax" : 1000
+        "configList": [{
+             "resourceName": "hca_shared_devices_a",
+             "rdmaHcaMax": 1000,
+             "devices": ["ib0", "ib1"]
+           },
+           {
+             "resourceName": "hca_shared_devices_b",
+             "rdmaHcaMax": 500,
+             "devices": ["ib3", "ib4"]
+           }
+        ]
     }

@@ -36,3 +36,8 @@
 [[constraint]]
   name = "github.com/fsnotify/fsnotify"
   version = "v1.4.7"
+
+[[constraint]]
+  name = "github.com/Mellanox/rdmamap"
+  revision = "7c3c4763a6ee6a4d624fe133135dc3a7c483111c"
+  source = "https://github.com/Mellanox/rdmamap.git"

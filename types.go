@@ -6,29 +6,36 @@ import (
 )
 
 const (
-	RdmaSharedDpSocket = "rdma-shared-dp.sock"
-	SockDir           = "/var/lib/kubelet/plugins_registry"
-	DeprecatedSockDir = "/var/lib/kubelet/device-plugins"
-	KubeEndPoint = "kubelet.sock"
+	RdmaSharedDpSuffix = "sock"
+	SockDir            = "/var/lib/kubelet/plugins_registry"
+	DeprecatedSockDir  = "/var/lib/kubelet/device-plugins"
+	KubeEndPoint       = "kubelet.sock"
 
-	RdmaHcaResourceName        = "rdma/hca"
+	RdmaHcaResourcePrefix = "rdma"
 )
 
 type UserConfig struct {
-	RdmaHcaMax int `json:"rdmaHcaMax"`
+	ResourceName string   `json:"resourceName"`
+	RdmaHcaMax   int      `json:"rdmaHcaMax"`
+	Devices      []string `json:"devices"`
+}
+
+type UserConfigList struct {
+	ConfigList []UserConfig `json:"configList"`
 }
 
 // RdmaDevPlugin implements the Kubernetes device plugin API
 type RdmaDevPlugin struct {
-	resourceName    string
-	watchMode       bool
-	socketName      string
-	socketPath      string
-	devs            []*pluginapi.Device
-	stop            chan interface{}
-	stopWatcher     chan bool
-	health          chan *pluginapi.Device
-	server          *grpc.Server
+	resourceName string
+	socketName   string
+	socketPath   string
+	watchMode    bool
+	devs         []*pluginapi.Device
+	deviceSpec   []*pluginapi.DeviceSpec
+	stop         chan interface{}
+	stopWatcher  chan bool
+	health       chan *pluginapi.Device
+	server       *grpc.Server
 }
 
 // ResourceServer is gRPC server implements K8s device plugin api
