@@ -32,3 +32,39 @@ Create test pod which requests 1 vhca resource.
 ```
 kubectl create -f example/test-hca-pod.yaml
 ```
+
+# How to use device plugin for RDMA
+
+The device plugin can be used with macvlan for RDMA, to do the following steps:
+
+**2.** use macvlan cni
+
+```
+# cat > /etc/cni/net.d/00-macvlan.conf <<EOF
+{
+    "cniVersion": "0.3.1",
+    "name": "mynet",
+    "type": "macvlan",
+     "master": "enp0s0f0",
+        "ipam": {
+                "type": "host-local",
+                "subnet": "10.56.217.0/24",
+                "rangeStart": "10.56.217.171",
+                "rangeEnd": "10.56.217.181",
+                "routes": [
+                        { "dst": "0.0.0.0/0" }
+                ],
+                "gateway": "10.56.217.1"
+        }
+}
+
+EOF
+```
+
+**2.** Follow the steps in the previous section to deploy the device plugin
+
+**3.** Deploy RDMA pod application
+
+```
+kubectl create -f <rdma-app.yaml>
+```
