@@ -6,20 +6,21 @@ import (
 )
 
 const (
-	RdmaSharedDpSuffix = "sock"
-	SockDir            = "/var/lib/kubelet/plugins_registry"
-	DeprecatedSockDir  = "/var/lib/kubelet/device-plugins"
-	KubeEndPoint       = "kubelet.sock"
+	sockDir           = "/var/lib/kubelet/plugins_registry"
+	deprecatedSockDir = "/var/lib/kubelet/device-plugins"
+	kubeEndPoint      = "kubelet.sock"
 
-	RdmaHcaResourcePrefix = "rdma"
+	rdmaHcaResourcePrefix = "rdma"
 )
 
+// UserConfig configuration for device plugin
 type UserConfig struct {
 	ResourceName string   `json:"resourceName"`
 	RdmaHcaMax   int      `json:"rdmaHcaMax"`
 	Devices      []string `json:"devices"`
 }
 
+// UserConfigList config list for servers
 type UserConfigList struct {
 	ConfigList []UserConfig `json:"configList"`
 }

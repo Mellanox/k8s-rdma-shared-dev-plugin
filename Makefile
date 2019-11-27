@@ -4,8 +4,12 @@ PACKAGE=k8s-rdma-shared-dev-plugin
 ORG_PATH=github.com/Mellanox
 REPO_PATH=$(ORG_PATH)/$(PACKAGE)
 GOPATH=$(CURDIR)/.gopath
+GOBIN =$(CURDIR)/bin
 BUILDDIR=$(CURDIR)/build
 BASE=$(GOPATH)/src/$(REPO_PATH)
+GOFILES=$(shell find . -name *.go | grep -vE "(\/vendor\/)|(_test.go)")
+PKGS=$(or $(PKG),$(shell cd $(BASE) && env GOPATH=$(GOPATH) $(GO) list ./... | grep -v "^$(PACKAGE)/vendor/"))
+TESTPKGS = $(shell env GOPATH=$(GOPATH) $(GO) list -f '{{ if or .TestGoFiles .XTestGoFiles }}{{ .ImportPath }}{{ end }}' $(PKGS))
 
 export GOPATH
 export GOBIN
@@ -30,15 +34,19 @@ IMAGE_BUILD_OPTS += $(DOCKERARGS)
 # Go tools
 GO      = go
 GOFMT   = gofmt
+GOLINT = $(GOBIN)/golint
 V = 0
 Q = $(if $(filter 1,$V),,@)
 
 .PHONY: all
-all: fmt build
+all: fmt lint build
 
 $(BASE): ; $(info  setting GOPATH...)
 	@mkdir -p $(dir $@)
 	@ln -sf $(CURDIR) $@
+
+$(GOBIN):
+	@mkdir -p $@
 
 $(BUILDDIR): | $(BASE) ; $(info Creating build directory...)
 	@cd $(BASE) && mkdir -p $@
@@ -56,6 +64,17 @@ fmt: ; $(info  running gofmt...) @ ## Run gofmt on all source files
 	@ret=0 && for d in $$($(GO) list -f '{{.Dir}}' ./... | grep -v /vendor/); do \
 		$(GOFMT) -l -w $$d/*.go || ret=$$? ; \
 	 done ; exit $$ret
+
+$(GOLINT): | $(BASE) ; $(info  building golint...)
+	$Q go get -u golang.org/x/lint/golint
+
+# Tests
+
+.PHONY: lint
+lint: | $(BASE) $(GOLINT) ; $(info  running golint...) @ ## Run go lint test
+	$Q cd $(BASE) && ret=0 && \
+		test -z "$$($(GOLINT)  | tee /dev/stderr)" || ret=1 ; \
+	 exit $$ret
 
 # Container image
 .PHONY: image
