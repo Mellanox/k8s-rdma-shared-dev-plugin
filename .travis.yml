@@ -1,0 +1,22 @@
+language: go
+sudo: required
+
+script:
+
+  - make lint
+  - make build
+  - make image
+
+before_deploy:
+  - docker login -u "$REGISTRY_USER" -p "$REGISTRY_PASS"
+
+deploy:
+  # Push image to Dockerhub on merge to master
+  - provider: script
+    skip_cleanup: true
+    script: >
+     bash -c '
+     docker push $IMAGE_NAME;
+     echo done'
+    on:
+      branch: master
