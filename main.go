@@ -6,15 +6,11 @@ import (
 )
 
 const (
-	ConfigFilePath = "/k8s-rdma-shared-dev-plugin/config.json"
-)
-
-const (
-	RdmaSharedDpVersion = "0.2"
+	rdmaSharedDpVersion = "0.2"
 )
 
 func main() {
-	log.Println("Starting K8s RDMA Shared Device Plugin version=", RdmaSharedDpVersion)
+	log.Println("Starting K8s RDMA Shared Device Plugin version=", rdmaSharedDpVersion)
 
 	rm := newResourceManager()
 

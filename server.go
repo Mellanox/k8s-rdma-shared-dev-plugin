@@ -53,9 +53,9 @@ func NewRdmaSharedDevPlugin(config *UserConfig, watcherMode bool, resourcePrefix
 	}
 
 	if watcherMode {
-		sockDir = SockDir
+		sockDir = sockDir
 	} else {
-		sockDir = DeprecatedSockDir
+		sockDir = deprecatedSockDir
 	}
 
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
@@ -191,6 +191,7 @@ func (m *RdmaDevPlugin) Stop() error {
 	return m.cleanup()
 }
 
+// Restart restart plugin server
 func (m *RdmaDevPlugin) Restart() error {
 	if err := m.Stop(); err != nil {
 		return err
@@ -198,9 +199,10 @@ func (m *RdmaDevPlugin) Restart() error {
 	return m.Start()
 }
 
+// Watch watch for changes in old socket if used
 func (m *RdmaDevPlugin) Watch() {
 	log.Println("Starting FS watcher.")
-	watcher, err := newFSWatcher(DeprecatedSockDir)
+	watcher, err := newFSWatcher(deprecatedSockDir)
 	if err != nil {
 		log.Println("Failed to created FS watcher.")
 		os.Exit(1)
@@ -230,7 +232,7 @@ func (m *RdmaDevPlugin) Watch() {
 
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (m *RdmaDevPlugin) register() error {
-	kubeletEndpoint := filepath.Join(DeprecatedSockDir, KubeEndPoint)
+	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
 	conn, err := dial(kubeletEndpoint, 5*time.Second)
 	if err != nil {
 		return err
@@ -278,7 +280,7 @@ func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReque
 
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
 
-	for i, _ := range r.GetContainerRequests() {
+	for i := range r.GetContainerRequests() {
 		ress[i] = &pluginapi.ContainerAllocateResponse{
 			Devices: m.deviceSpec,
 		}
@@ -292,12 +294,14 @@ func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReque
 	return &response, nil
 }
 
+// GetDevicePluginOptions returns options to be communicated with Device Manager
 func (m *RdmaDevPlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
 	}, nil
 }
 
+// PreStartContainer is called, if indicated by Device Plugin during registeration phase
 func (m *RdmaDevPlugin) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
@@ -310,16 +314,18 @@ func (m *RdmaDevPlugin) cleanup() error {
 	return nil
 }
 
+// GetInfo get info of plugin
 func (m *RdmaDevPlugin) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              m.resourceName,
-		Endpoint:          filepath.Join(SockDir, m.socketName),
+		Endpoint:          filepath.Join(sockDir, m.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
 }
 
+// NotifyRegistrationStatus notify for registration status
 func (m *RdmaDevPlugin) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
 	if regstat.PluginRegistered {
 		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)

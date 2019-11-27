@@ -8,6 +8,12 @@ import (
 	"regexp"
 )
 
+const (
+	configFilePath     = "/k8s-rdma-shared-dev-plugin/config.json"
+	rdmaSharedDpSuffix = "sock"
+)
+
+// ResourceManager for plugin
 type ResourceManager struct {
 	configFile        string
 	resourcePrefix    string
@@ -18,20 +24,21 @@ type ResourceManager struct {
 }
 
 func newResourceManager() *ResourceManager {
-	watcherMode := detectPluginWatchMode(SockDir)
+	watcherMode := detectPluginWatchMode(sockDir)
 	if watcherMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
 	} else {
 		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 	}
 	return &ResourceManager{
-		configFile:     ConfigFilePath,
-		resourcePrefix: RdmaHcaResourcePrefix,
-		socketSuffix:   RdmaSharedDpSuffix,
+		configFile:     configFilePath,
+		resourcePrefix: rdmaHcaResourcePrefix,
+		socketSuffix:   rdmaSharedDpSuffix,
 		watchMode:      watcherMode,
 	}
 }
 
+// ReadConfig to read configs
 func (rm *ResourceManager) ReadConfig() error {
 	log.Println("Reading", rm.configFile)
 	raw, err := ioutil.ReadFile(rm.configFile)
@@ -74,6 +81,7 @@ func (rm *ResourceManager) validConfigs() bool {
 	return true
 }
 
+// InitServers init server
 func (rm *ResourceManager) InitServers() error {
 	for _, config := range rm.configList {
 		log.Printf("Resource: %v\n", config)
@@ -86,6 +94,7 @@ func (rm *ResourceManager) InitServers() error {
 	return nil
 }
 
+// StartAllServers start all servers
 func (rm *ResourceManager) StartAllServers() error {
 	for _, rs := range rm.sharedRdmaPlugins {
 		log.Printf("Resource: %v\n", rs.resourceName)
@@ -101,6 +110,7 @@ func (rm *ResourceManager) StartAllServers() error {
 	return nil
 }
 
+// StopAllServers stop all servers
 func (rm *ResourceManager) StopAllServers() error {
 	for _, rs := range rm.sharedRdmaPlugins {
 		if err := rs.Stop(); err != nil {
@@ -110,6 +120,7 @@ func (rm *ResourceManager) StopAllServers() error {
 	return nil
 }
 
+// RestartAllServers restart all servers
 func (rm *ResourceManager) RestartAllServers() error {
 	for _, rs := range rm.sharedRdmaPlugins {
 		if err := rs.Restart(); err != nil {
