@@ -17,13 +17,13 @@ Create config map to describe mode as "hca" mode.
 This is per node configuration.
 
 ```
-kubectl create -f example/rdma-hca-node-config.yaml
+kubectl create -f images/k8s-rdma-shared-dev-plugin-config-map.yaml
 ```
 
 **3.** Deploy device plugin
 
 ```
-kubectl create -f example/device-plugin.yaml
+kubectl create -f images/k8s-rdma-shared-dev-plugin-ds.yaml
 ```
 
 **4.** Create Test pod

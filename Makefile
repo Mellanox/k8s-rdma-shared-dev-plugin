@@ -4,10 +4,28 @@ PACKAGE=k8s-rdma-shared-dev-plugin
 ORG_PATH=github.com/Mellanox
 REPO_PATH=$(ORG_PATH)/$(PACKAGE)
 GOPATH=$(CURDIR)/.gopath
-BUILDDIR=$(CURDIR)/binary
+BUILDDIR=$(CURDIR)/build
 BASE=$(GOPATH)/src/$(REPO_PATH)
 
 export GOPATH
+export GOBIN
+
+# Docker
+IMAGE_BUILDER?=@docker
+IMAGEDIR=$(BASE)/images
+DOCKERFILE?=$(CURDIR)/Dockerfile
+TAG?=rdma/k8s-rdma-shared-dev-plugin
+IMAGE_BUILD_OPTS?=
+# Accept proxy settings for docker
+# To pass proxy for Docker invoke it as 'make image HTTP_POXY=http://192.168.0.1:8080'
+DOCKERARGS=
+ifdef HTTP_PROXY
+	DOCKERARGS += --build-arg http_proxy=$(HTTP_PROXY)
+endif
+ifdef HTTPS_PROXY
+	DOCKERARGS += --build-arg https_proxy=$(HTTPS_PROXY)
+endif
+IMAGE_BUILD_OPTS += $(DOCKERARGS)
 
 # Go tools
 GO      = go
@@ -38,6 +56,11 @@ fmt: ; $(info  running gofmt...) @ ## Run gofmt on all source files
 	@ret=0 && for d in $$($(GO) list -f '{{.Dir}}' ./... | grep -v /vendor/); do \
 		$(GOFMT) -l -w $$d/*.go || ret=$$? ; \
 	 done ; exit $$ret
+
+# Container image
+.PHONY: image
+image: | $(BASE) ; $(info Building Docker image...)  ## Build conatiner image
+	$(IMAGE_BUILDER) build -t $(TAG) -f $(DOCKERFILE)  $(CURDIR) $(IMAGE_BUILD_OPTS)
 
 # Misc
 
