@@ -34,7 +34,8 @@ IMAGE_BUILD_OPTS += $(DOCKERARGS)
 # Go tools
 GO      = go
 GOFMT   = gofmt
-GOLINT = $(GOBIN)/golint
+GOLINT = $(GOBIN)/golangci-lint
+TIMEOUT = 15
 V = 0
 Q = $(if $(filter 1,$V),,@)
 
@@ -54,8 +55,8 @@ $(BUILDDIR): | $(BASE) ; $(info Creating build directory...)
 build: $(BUILDDIR)/$(BINARY_NAME) ; $(info Building $(BINARY_NAME)...) ## Build executable file
 	$(info Done!)
 
-$(BUILDDIR)/$(BINARY_NAME): $(BUILDDIR)
-	@cd $(BASE) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -v
+$(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
+	@cd $(BASE)/cmd/$(BINARY_NAME) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -v
 
 # Tools
 
@@ -65,16 +66,51 @@ fmt: ; $(info  running gofmt...) @ ## Run gofmt on all source files
 		$(GOFMT) -l -w $$d/*.go || ret=$$? ; \
 	 done ; exit $$ret
 
-$(GOLINT): | $(BASE) ; $(info  building golint...)
-	$Q go get -u golang.org/x/lint/golint
+$(GOLINT): | $(BASE) ; $(info  building golangci-lint...)
+	$Q go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
+
+GOVERALLS = $(GOBIN)/goveralls
+$(GOBIN)/goveralls: | $(BASE) ; $(info  building goveralls...)
+	$Q go get github.com/mattn/goveralls
 
 # Tests
 
 .PHONY: lint
-lint: | $(BASE) $(GOLINT) ; $(info  running golint...) @ ## Run go lint test
-	$Q cd $(BASE) && ret=0 && \
-		test -z "$$($(GOLINT)  | tee /dev/stderr)" || ret=1 ; \
+lint: | $(BASE) $(GOLINT) ; $(info  running golint...) @ ## Run golint
+	$Q cd $(BASE) && ret=0 &&\
+		test -z "$$($(GOLINT) run | tee /dev/stderr)" || ret=1 ; \
 	 exit $$ret
+
+TEST_TARGETS := test-default test-bench test-short test-verbose test-race
+.PHONY: $(TEST_TARGETS) test-xml check test tests
+test-bench:   ARGS=-run=__absolutelynothing__ -bench=. ## Run benchmarks
+test-short:   ARGS=-short        ## Run only short tests
+test-verbose: ARGS=-v            ## Run tests in verbose mode with coverage reporting
+test-race:    ARGS=-race         ## Run tests with race detector
+$(TEST_TARGETS): NAME=$(MAKECMDGOALS:test-%=%)
+$(TEST_TARGETS): test
+check test tests: fmt lint | $(BASE) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests
+	$Q cd $(BASE) && $(GO) test -timeout $(TIMEOUT)s $(ARGS) $(TESTPKGS)
+
+test-xml: fmt lint | $(BASE) $(GO2XUNIT) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests with xUnit output
+	$Q cd $(BASE) && 2>&1 $(GO) test -timeout 20s -v $(TESTPKGS) | tee test/tests.output
+	$(GO2XUNIT) -fail -input test/tests.output -output test/tests.xml
+
+COVERAGE_MODE = count
+.PHONY: test-coverage test-coverage-tools
+test-coverage-tools: | $(GOVERALLS)
+test-coverage: COVERAGE_DIR := $(CURDIR)/test
+test-coverage: fmt lint test-coverage-tools | $(BASE) ; $(info  running coverage tests...) @ ## Run coverage tests
+	$Q mkdir -p $(COVERAGE_DIR)/coverage
+	$Q cd $(BASE) && for pkg in $(TESTPKGS); do \
+		$(GO) test \
+		    -timeout $(TIMEOUT)s \
+			-coverpkg=$$($(GO) list -f '{{ join .Deps "\n" }}' $$pkg | \
+					grep '^$(PACKAGE)/' | grep -v '^$(PACKAGE)/vendor/' | \
+					tr '\n' ',')$$pkg \
+			-covermode=$(COVERAGE_MODE) \
+			-coverprofile="$(COVERAGE_DIR)/coverage/`echo $$pkg | tr "/" "-"`.cover" $$pkg ;\
+	 done
 
 # Container image
 .PHONY: image
@@ -87,6 +123,7 @@ image: | $(BASE) ; $(info Building Docker image...)  ## Build conatiner image
 clean: ; $(info  Cleaning...)	 ## Cleanup everything
 	@rm -rf $(GOPATH)
 	@rm -rf $(BUILDDIR)
+	@rm -rf  test
 
 .PHONY: help
 help: ## Show this message
