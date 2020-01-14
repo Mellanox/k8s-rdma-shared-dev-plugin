@@ -1,4 +1,4 @@
-package main
+package resources
 
 import (
 	"os"
@@ -24,7 +24,8 @@ func newFSWatcher(files ...string) (*fsnotify.Watcher, error) {
 	return watcher, nil
 }
 
-func newOSWatcher(sigs ...os.Signal) chan os.Signal {
+// NewOSWatcher for watching signals
+func NewOSWatcher(sigs ...os.Signal) chan os.Signal {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, sigs...)
 

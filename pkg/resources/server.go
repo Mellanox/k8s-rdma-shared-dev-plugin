@@ -1,8 +1,9 @@
-package main
+package resources
 
 import (
 	"fmt"
-	"github.com/Mellanox/rdmamap"
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 	"github.com/fsnotify/fsnotify"
 	"log"
 	"net"
@@ -17,17 +18,30 @@ import (
 	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 )
 
-// NewRdmaSharedDevPlugin returns an initialized RdmaDevPlugin
-func NewRdmaSharedDevPlugin(config *UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (*RdmaDevPlugin, error) {
+// resourceServer implements the Kubernetes device plugin API
+type resourceServer struct {
+	resourceName string
+	socketName   string
+	socketPath   string
+	watchMode    bool
+	devs         []*pluginapi.Device
+	deviceSpec   []*pluginapi.DeviceSpec
+	stop         chan interface{}
+	stopWatcher  chan bool
+	health       chan *pluginapi.Device
+	server       *grpc.Server
+}
 
-	var devs = []*pluginapi.Device{}
+// NewRdmaSharedDevPlugin returns an initialized resourceServer
+func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (types.ResourceServer, error) {
+
+	var devs []*pluginapi.Device
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
-	var sockDir string
 
-	log.Println("shared hca mode")
+	sockDir := activeSockDir
 
 	if config.RdmaHcaMax < 0 {
-		return nil, fmt.Errorf("Error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
+		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
 	}
 
 	for n := 0; n < config.RdmaHcaMax; n++ {
@@ -40,27 +54,25 @@ func NewRdmaSharedDevPlugin(config *UserConfig, watcherMode bool, resourcePrefix
 	}
 
 	for _, device := range config.Devices {
-		pciAddres, err := getPciAddress(device)
+		pciAddress, err := utils.GetPciAddress(device)
 		// Skip non existing devices
 		if err != nil {
 			continue
 		}
-		rdmaDeviceSpec := getRdmaDeviceSpec(pciAddres)
+		rdmaDeviceSpec := getRdmaDeviceSpec(pciAddress)
 		if len(rdmaDeviceSpec) == 0 {
 			log.Printf("Warning: non-Rdma Device %s\n", device)
 		}
 		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
 	}
 
-	if watcherMode {
-		sockDir = sockDir
-	} else {
+	if !watcherMode {
 		sockDir = deprecatedSockDir
 	}
 
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
 
-	return &RdmaDevPlugin{
+	return &resourceServer{
 		resourceName: fmt.Sprintf("%s/%s", resourcePrefix, config.ResourceName),
 		socketName:   socketName,
 		socketPath:   filepath.Join(sockDir, socketName),
@@ -98,44 +110,20 @@ func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error
 
 func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
-	rdmaResources := rdmamap.GetRdmaDevicesForPcidev(pciAddress)
-	for _, resource := range rdmaResources {
-		resRdmaDevices := rdmamap.GetRdmaCharDevices(resource)
-		for _, rdmaDevice := range resRdmaDevices {
-			deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
-				HostPath:      rdmaDevice,
-				ContainerPath: rdmaDevice,
-				Permissions:   "rwm",
-			})
-		}
+
+	rdmaDevices := utils.GetRdmaDevices(pciAddress)
+	for _, device := range rdmaDevices {
+		deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
+			HostPath:      device,
+			ContainerPath: device,
+			Permissions:   "rwm"})
 	}
 
 	return deviceSpec
 }
 
-func getPciAddress(ifName string) (string, error) {
-	var pciAddress string
-	ifaceDir := fmt.Sprintf("/sys/class/net/%s/device", ifName)
-	dirInfo, err := os.Lstat(ifaceDir)
-	if err != nil {
-		return pciAddress, fmt.Errorf("can't get the symbolic link of the device %q: %v", ifName, err)
-	}
-
-	if (dirInfo.Mode() & os.ModeSymlink) == 0 {
-		return pciAddress, fmt.Errorf("no symbolic link for the device %q", ifName)
-	}
-
-	pciInfo, err := os.Readlink(ifaceDir)
-	if err != nil {
-		return pciAddress, fmt.Errorf("can't read the symbolic link of the device %q: %v", ifName, err)
-	}
-
-	pciAddress = pciInfo[9:]
-	return pciAddress, nil
-}
-
 // Start starts the gRPC server of the device plugin
-func (m *RdmaDevPlugin) Start() error {
+func (m *resourceServer) Start() error {
 	err := m.cleanup()
 	if err != nil {
 		return err
@@ -176,7 +164,7 @@ func (m *RdmaDevPlugin) Start() error {
 }
 
 // Stop stops the gRPC server
-func (m *RdmaDevPlugin) Stop() error {
+func (m *resourceServer) Stop() error {
 	if m.server == nil {
 		return nil
 	}
@@ -192,7 +180,7 @@ func (m *RdmaDevPlugin) Stop() error {
 }
 
 // Restart restart plugin server
-func (m *RdmaDevPlugin) Restart() error {
+func (m *resourceServer) Restart() error {
 	if err := m.Stop(); err != nil {
 		return err
 	}
@@ -200,7 +188,7 @@ func (m *RdmaDevPlugin) Restart() error {
 }
 
 // Watch watch for changes in old socket if used
-func (m *RdmaDevPlugin) Watch() {
+func (m *resourceServer) Watch() {
 	log.Println("Starting FS watcher.")
 	watcher, err := newFSWatcher(deprecatedSockDir)
 	if err != nil {
@@ -231,7 +219,7 @@ func (m *RdmaDevPlugin) Watch() {
 }
 
 // Register registers the device plugin for the given resourceName with Kubelet.
-func (m *RdmaDevPlugin) register() error {
+func (m *resourceServer) register() error {
 	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
 	conn, err := dial(kubeletEndpoint, 5*time.Second)
 	if err != nil {
@@ -254,7 +242,7 @@ func (m *RdmaDevPlugin) register() error {
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (m *RdmaDevPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+func (m *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	fmt.Println("exposing devices: ", m.devs)
 	s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
 
@@ -270,12 +258,12 @@ func (m *RdmaDevPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugi
 	}
 }
 
-func (m *RdmaDevPlugin) unhealthy(dev *pluginapi.Device) {
+func (m *resourceServer) unhealthy(dev *pluginapi.Device) {
 	m.health <- dev
 }
 
 // Allocate which return list of devices.
-func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
@@ -295,18 +283,18 @@ func (m *RdmaDevPlugin) Allocate(ctx context.Context, r *pluginapi.AllocateReque
 }
 
 // GetDevicePluginOptions returns options to be communicated with Device Manager
-func (m *RdmaDevPlugin) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
+func (m *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
 	}, nil
 }
 
 // PreStartContainer is called, if indicated by Device Plugin during registeration phase
-func (m *RdmaDevPlugin) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
+func (m *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-func (m *RdmaDevPlugin) cleanup() error {
+func (m *resourceServer) cleanup() error {
 	if err := os.Remove(m.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -315,18 +303,18 @@ func (m *RdmaDevPlugin) cleanup() error {
 }
 
 // GetInfo get info of plugin
-func (m *RdmaDevPlugin) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
+func (m *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              m.resourceName,
-		Endpoint:          filepath.Join(sockDir, m.socketName),
+		Endpoint:          m.socketPath,
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
 }
 
 // NotifyRegistrationStatus notify for registration status
-func (m *RdmaDevPlugin) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
+func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
 	if regstat.PluginRegistered {
 		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)
 	} else {
