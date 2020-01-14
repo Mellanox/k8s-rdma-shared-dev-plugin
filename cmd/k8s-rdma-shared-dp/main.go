@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 	"log"
 	"syscall"
 )
@@ -12,19 +13,15 @@ const (
 func main() {
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", rdmaSharedDpVersion)
 
-	rm := newResourceManager()
+	rm := resources.NewResourceManager()
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {
 		log.Fatalln(err.Error())
 	}
 
-	if len(rm.configList) < 1 {
-		log.Fatalln("no resource configuration; exiting")
-	}
-
-	if !rm.validConfigs() {
-		log.Fatalln("Exiting.. one or more invalid configuration(s) given")
+	if err := rm.ValidateConfigs(); err != nil {
+		log.Fatalf("Exiting.. one or more invalid configuration(s) given: %v", err)
 	}
 
 	log.Println("Initializing resource servers")
@@ -41,20 +38,18 @@ func main() {
 
 	log.Println("Listening for term signals")
 	log.Println("Starting OS watcher.")
-	sigs := newOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	sigs := resources.NewOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
-	select {
-	case s := <-sigs:
-		switch s {
-		case syscall.SIGHUP:
-			log.Println("Received SIGHUP, restarting.")
-			if err := rm.RestartAllServers(); err != nil {
-				log.Fatalf("unable to restart server %v", err)
-			}
-		default:
-			log.Printf("Received signal \"%v\", shutting down.", s)
-			rm.StopAllServers()
-			return
+	s := <-sigs
+	switch s {
+	case syscall.SIGHUP:
+		log.Println("Received SIGHUP, restarting.")
+		if err := rm.RestartAllServers(); err != nil {
+			log.Fatalf("unable to restart server %v", err)
 		}
+	default:
+		log.Printf("Received signal \"%v\", shutting down.", s)
+		_ = rm.StopAllServers()
+		return
 	}
 }
