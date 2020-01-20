@@ -5,34 +5,97 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
+	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
-
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
-	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 )
 
-// resourceServer implements the Kubernetes device plugin API
-type resourceServer struct {
-	resourceName string
-	socketName   string
-	socketPath   string
-	watchMode    bool
-	devs         []*pluginapi.Device
-	deviceSpec   []*pluginapi.DeviceSpec
-	stop         chan interface{}
-	stopWatcher  chan bool
-	health       chan *pluginapi.Device
-	server       *grpc.Server
+type resourcesServerPort struct {
+	server *grpc.Server
 }
 
-// NewResourceServer returns an initialized resourceServer
+type resourceServer struct {
+	resourceName  string
+	watchMode     bool
+	socketName    string
+	socketPath    string
+	devs          []*pluginapi.Device
+	deviceSpec    []*pluginapi.DeviceSpec
+	stop          chan interface{}
+	stopWatcher   chan bool
+	health        chan *pluginapi.Device
+	socketWatcher *fsnotify.Watcher
+	rsConnector   types.ResourceServerPort
+}
+
+func (rsc *resourcesServerPort) GetServer() *grpc.Server {
+	return rsc.server
+}
+
+func (rsc *resourcesServerPort) CreateServer() {
+	rsc.server = grpc.NewServer([]grpc.ServerOption{}...)
+}
+
+func (rsc *resourcesServerPort) DeleteServer() {
+	rsc.server = nil
+}
+
+func (rsc *resourcesServerPort) Listen(socketType, socketPath string) (net.Listener, error) {
+	return net.Listen(socketType, socketPath)
+}
+
+func (rsc *resourcesServerPort) Serve(socket net.Listener) {
+	go func() {
+		_ = rsc.server.Serve(socket)
+	}()
+}
+
+func (rsc *resourcesServerPort) Stop() {
+	rsc.server.Stop()
+}
+
+func (rsc *resourcesServerPort) Close(clientConnection *grpc.ClientConn) {
+	_ = clientConnection.Close()
+}
+
+func (rsc *resourcesServerPort) Register(client pluginapi.RegistrationClient, reqt *pluginapi.RegisterRequest) error {
+	_, err := client.Register(context.Background(), reqt)
+	return err
+}
+
+func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
+	var c *grpc.ClientConn
+	var err error
+	connChannel := make(chan interface{})
+
+	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
+	defer timeoutCancel()
+	go func() {
+		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithInsecure(),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return net.Dial("unix", addr)
+			}),
+		)
+		connChannel <- "done"
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timout while trying to connect %s", unixSocketPath)
+
+	case <-connChannel:
+		return c, err
+	}
+}
+
+// newResourceServer returns an initialized server
 func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (types.ResourceServer, error) {
 
 	var devs []*pluginapi.Device
@@ -82,6 +145,7 @@ func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefi
 		stop:         make(chan interface{}),
 		stopWatcher:  make(chan bool),
 		health:       make(chan *pluginapi.Device),
+		rsConnector:  &resourcesServerPort{},
 	}, nil
 }
 
@@ -92,47 +156,6 @@ func detectPluginWatchMode(sockDir string) bool {
 	return true
 }
 
-// dial establishes the gRPC communication with the registered device plugin.
-func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
-	var c *grpc.ClientConn
-	var err error
-	connChannel := make(chan interface{})
-	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
-
-	defer timeoutCancel()
-
-	go func() {
-		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithInsecure(), grpc.WithBlock(),
-			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-				return net.Dial("unix", addr)
-			}),
-		)
-		connChannel <- "done"
-	}()
-
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("timout while trying to connect %s", unixSocketPath)
-
-	case <-connChannel:
-		return c, err
-	}
-}
-
-func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
-	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
-
-	rdmaDevices := utils.GetRdmaDevices(pciAddress)
-	for _, device := range rdmaDevices {
-		deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
-			HostPath:      device,
-			ContainerPath: device,
-			Permissions:   "rwm"})
-	}
-
-	return deviceSpec
-}
-
 // Start starts the gRPC server of the device plugin
 func (m *resourceServer) Start() error {
 	err := m.cleanup()
@@ -140,50 +163,44 @@ func (m *resourceServer) Start() error {
 		return err
 	}
 
-	sock, err := net.Listen("unix", m.socketPath)
+	m.rsConnector.CreateServer()
+	sock, err := m.rsConnector.Listen("unix", m.socketPath)
 	if err != nil {
 		return err
 	}
-
-	m.server = grpc.NewServer([]grpc.ServerOption{}...)
 
 	if m.watchMode {
-		registerapi.RegisterRegistrationServer(m.server, m)
+		registerapi.RegisterRegistrationServer(m.rsConnector.GetServer(), m)
 	}
-	pluginapi.RegisterDevicePluginServer(m.server, m)
+	pluginapi.RegisterDevicePluginServer(m.rsConnector.GetServer(), m)
 
-	go func() {
-		_ = m.server.Serve(sock)
-	}()
+	m.rsConnector.Serve(sock)
 
 	// Wait for server to start by launching a blocking connexion
-	conn, err := dial(m.socketPath, 5*time.Second)
+	conn, err := m.rsConnector.Dial(m.socketPath, 5*time.Second)
 	if err != nil {
 		return err
 	}
-	conn.Close()
+	m.rsConnector.Close(conn)
 
 	if !m.watchMode {
 		if err = m.register(); err != nil {
-			m.server.Stop()
-			log.Fatal(err)
+			m.rsConnector.Stop()
 			return err
 		}
 	}
-
-	// go m.healthcheck()
 
 	return nil
 }
 
 // Stop stops the gRPC server
 func (m *resourceServer) Stop() error {
-	if m.server == nil {
+	if m.rsConnector == nil || m.rsConnector.GetServer() == nil {
 		return nil
 	}
 
-	m.server.Stop()
-	m.server = nil
+	m.rsConnector.Stop()
+	m.rsConnector.DeleteServer()
 	if !m.watchMode {
 		m.stopWatcher <- true
 	}
@@ -201,13 +218,13 @@ func (m *resourceServer) Restart() error {
 }
 
 // Watch watch for changes in old socket if used
-func (m *resourceServer) Watch() {
+func (m *resourceServer) Watch() error {
 	log.Println("Starting FS watcher.")
 	watcher, err := newFSWatcher(deprecatedSockDir)
 	if err != nil {
-		log.Println("Failed to created FS watcher.")
-		os.Exit(1)
+		log.Fatal("Failed to created FS watcher.")
 	}
+	m.socketWatcher = watcher
 	defer watcher.Close()
 
 	select {
@@ -215,30 +232,30 @@ func (m *resourceServer) Watch() {
 		if event.Name == m.socketPath && event.Op&fsnotify.Create == fsnotify.Create {
 			log.Printf("inotify: %s created, restarting.", m.socketPath)
 			if err = m.Restart(); err != nil {
-				log.Fatalf("unable to restart server %v", err)
+				return fmt.Errorf("unable to restart server %v", err)
 			}
 		}
 
 	case err := <-watcher.Errors:
-		log.Printf("inotify: %s", err)
+		return fmt.Errorf("inotify: %s", err)
 
 	case stop := <-m.stopWatcher:
 		if stop {
 			log.Println("kubelet watcher stopped")
-			watcher.Close()
-			return
+			_ = watcher.Close()
 		}
 	}
+	return nil
 }
 
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (m *resourceServer) register() error {
 	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
-	conn, err := dial(kubeletEndpoint, 5*time.Second)
+	conn, err := m.rsConnector.Dial(kubeletEndpoint, 5*time.Second)
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer m.rsConnector.Close(conn)
 
 	client := pluginapi.NewRegistrationClient(conn)
 	reqt := &pluginapi.RegisterRequest{
@@ -247,11 +264,7 @@ func (m *resourceServer) register() error {
 		ResourceName: m.resourceName,
 	}
 
-	_, err = client.Register(context.Background(), reqt)
-	if err != nil {
-		return err
-	}
-	return nil
+	return m.rsConnector.Register(client, reqt)
 }
 
 // ListAndWatch lists devices and update that list according to the health status
@@ -316,7 +329,7 @@ func (m *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoReque
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              m.resourceName,
-		Endpoint:          m.socketPath,
+		Endpoint:          filepath.Join(activeSockDir, m.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
@@ -328,7 +341,21 @@ func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *
 		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)
 	} else {
 		log.Printf("%s failed to be registered at Kubelet: %v; restarting.\n", m.socketName, regstat.Error)
-		m.server.Stop()
+		m.rsConnector.Stop()
 	}
 	return &registerapi.RegistrationStatusResponse{}, nil
+}
+
+func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
+	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
+
+	rdmaDevices := utils.GetRdmaDevices(pciAddress)
+	for _, device := range rdmaDevices {
+		deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
+			HostPath:      device,
+			ContainerPath: device,
+			Permissions:   "rwm"})
+	}
+
+	return deviceSpec
 }

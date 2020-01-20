@@ -38,7 +38,8 @@ func main() {
 
 	log.Println("Listening for term signals")
 	log.Println("Starting OS watcher.")
-	sigs := resources.NewOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signalsNotifier := resources.NewSignalNotifier(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	sigs := signalsNotifier.Notify()
 
 	s := <-sigs
 	switch s {
