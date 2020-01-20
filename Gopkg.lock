@@ -45,23 +45,23 @@
   version = "v1.3.2"
 
 [[projects]]
-  digest = "1:2d9d06cb9d46dacfdbb45f8575b39fc0126d083841a29d4fbf8d97708f43107e"
+  digest = "1:1314b5ef1c0b25257ea02e454291bf042478a48407cfe3ffea7e20323bbf5fdf"
   name = "github.com/vishvananda/netlink"
   packages = [
     ".",
     "nl",
   ]
   pruneopts = "UT"
-  revision = "a2ad57a690f3caf3015351d2d6e1c0b95c349752"
-  version = "v1.0.0"
+  revision = "f049be6f391489d3f374498fe0c8df8449258372"
+  source = "https://github.com/vishvananda/netlink.git"
 
 [[projects]]
-  branch = "master"
-  digest = "1:b405c6b13f8f88fde0aab3e5c566554fc7c2c5579dc5de603a188d4e44db2712"
+  digest = "1:975cb0c04431bf92e60b636a15897c4a3faba9f7dc04da505646630ac91d29d3"
   name = "github.com/vishvananda/netns"
   packages = ["."]
   pruneopts = "UT"
-  revision = "7109fa855b0ff1ebef7fbd2f6aa613e8db7cfbc0"
+  revision = "0a2b9b5464df8343199164a0321edf3313202f7e"
+  source = "https://github.com/vishvananda/netns.git"
 
 [[projects]]
   branch = "release-branch.go1.10"
@@ -80,12 +80,12 @@
   revision = "0ed95abb35c445290478a5348a7b38bb154135fd"
 
 [[projects]]
-  branch = "release-branch.go1.11"
-  digest = "1:33a43cb31975899cfcd81600d1390467db1778ae87102f80668a753fed8c663e"
+  digest = "1:47844666be86089349a441f5f0ece22f42a87a8cb8c9a31294c593f43209ad19"
   name = "golang.org/x/sys"
   packages = ["unix"]
   pruneopts = "UT"
-  revision = "98c5dad5d1a0e8a73845ecc8897d0bd56586511d"
+  revision = "fde4db37ae7ad8191b03d30d27f258b5291ae4e3"
+  source = "https://github.com/golang/sys.git"
 
 [[projects]]
   digest = "1:8d8faad6b12a3a4c819a3f9618cb6ee1fa1cfc33253abeeea8b55336721e3405"
@@ -113,18 +113,20 @@
   version = "v0.3.2"
 
 [[projects]]
-  branch = "revert-179-regen"
+  branch = "master"
   digest = "1:583a0c80f5e3a9343d33aea4aead1e1afcc0043db66fdf961ddd1fe8cd3a4faf"
   name = "google.golang.org/genproto"
   packages = ["googleapis/rpc/status"]
   pruneopts = "UT"
-  revision = "176845766e5973b398e4027e0636f00464432fb8"
+  revision = "32f20d992d240fbca6ef7dec6c05d1f024314e02"
+  source = "https://github.com/googleapis/go-genproto.git"
 
 [[projects]]
-  digest = "1:b59ce3ddb11daeeccccc9cb3183b58ebf8e9a779f1c853308cd91612e817a301"
+  digest = "1:3fe55026bb11519b45c0fc9d848fd779028b868dc62f5563c518cf850c7421d5"
   name = "google.golang.org/grpc"
   packages = [
     ".",
+    "attributes",
     "backoff",
     "balancer",
     "balancer/base",
@@ -161,8 +163,8 @@
     "tap",
   ]
   pruneopts = "UT"
-  revision = "1a3960e4bd028ac0cec0a2afd27d7d8e67c11514"
-  version = "v1.25.1"
+  revision = "f5b0812e6fe574d90da76b205e9eb51f6ddb1919"
+  version = "v1.26.0"
 
 [[projects]]
   digest = "1:a708c7e24f744dcbba5013ec62602588e86a21067659a5eaf4b81ce133864dda"
