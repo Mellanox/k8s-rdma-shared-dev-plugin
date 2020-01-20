@@ -34,7 +34,7 @@ IMAGE_BUILD_OPTS += $(DOCKERARGS)
 # Go tools
 GO      = go
 GOFMT   = gofmt
-GOLINT = $(GOBIN)/golint
+GOLINT = $(GOBIN)/golangci-lint
 V = 0
 Q = $(if $(filter 1,$V),,@)
 
@@ -65,15 +65,15 @@ fmt: ; $(info  running gofmt...) @ ## Run gofmt on all source files
 		$(GOFMT) -l -w $$d/*.go || ret=$$? ; \
 	 done ; exit $$ret
 
-$(GOLINT): | $(BASE) ; $(info  building golint...)
-	$Q go get -u golang.org/x/lint/golint
+$(GOLINT): | $(BASE) ; $(info  building golangci-lint...)
+	$Q go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 
 # Tests
 
 .PHONY: lint
-lint: | $(BASE) $(GOLINT) ; $(info  running golint...) @ ## Run go lint test
-	$Q cd $(BASE) && ret=0 && \
-		test -z "$$($(GOLINT)  | tee /dev/stderr)" || ret=1 ; \
+lint: | $(BASE) $(GOLINT) ; $(info  running golangci-lint...) @ ## Run golint
+	$Q cd $(BASE) && ret=0 &&\
+		test -z "$$($(GOLINT) run | tee /dev/stderr)" || ret=1 ; \
 	 exit $$ret
 
 # Container image

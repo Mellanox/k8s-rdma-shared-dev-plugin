@@ -32,7 +32,7 @@ type resourceServer struct {
 	server       *grpc.Server
 }
 
-// NewRdmaSharedDevPlugin returns an initialized resourceServer
+// NewResourceServer returns an initialized resourceServer
 func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (types.ResourceServer, error) {
 
 	var devs []*pluginapi.Device
@@ -94,18 +94,29 @@ func detectPluginWatchMode(sockDir string) bool {
 
 // dial establishes the gRPC communication with the registered device plugin.
 func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
-	c, err := grpc.Dial(unixSocketPath, grpc.WithInsecure(), grpc.WithBlock(),
-		grpc.WithTimeout(timeout),
-		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
-			return net.DialTimeout("unix", addr, timeout)
-		}),
-	)
+	var c *grpc.ClientConn
+	var err error
+	connChannel := make(chan interface{})
+	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
 
-	if err != nil {
-		return nil, err
+	defer timeoutCancel()
+
+	go func() {
+		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithInsecure(), grpc.WithBlock(),
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return net.Dial("unix", addr)
+			}),
+		)
+		connChannel <- "done"
+	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("timout while trying to connect %s", unixSocketPath)
+
+	case <-connChannel:
+		return c, err
 	}
-
-	return c, nil
 }
 
 func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
@@ -141,7 +152,9 @@ func (m *resourceServer) Start() error {
 	}
 	pluginapi.RegisterDevicePluginServer(m.server, m)
 
-	go m.server.Serve(sock)
+	go func() {
+		_ = m.server.Serve(sock)
+	}()
 
 	// Wait for server to start by launching a blocking connexion
 	conn, err := dial(m.socketPath, 5*time.Second)
@@ -243,8 +256,8 @@ func (m *resourceServer) register() error {
 
 // ListAndWatch lists devices and update that list according to the health status
 func (m *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	fmt.Println("exposing devices: ", m.devs)
-	s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+	log.Println("exposing devices: ", m.devs)
+	_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
 
 	for {
 		select {
@@ -253,13 +266,9 @@ func (m *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlug
 		case d := <-m.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
 			d.Health = pluginapi.Unhealthy
-			s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
 		}
 	}
-}
-
-func (m *resourceServer) unhealthy(dev *pluginapi.Device) {
-	m.health <- dev
 }
 
 // Allocate which return list of devices.
