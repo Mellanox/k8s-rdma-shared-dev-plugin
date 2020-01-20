@@ -1,9 +1,10 @@
 package resources
 
 import (
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"os"
 	"os/signal"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 
 	"github.com/fsnotify/fsnotify"
 )

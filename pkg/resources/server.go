@@ -2,19 +2,21 @@ package resources
 
 import (
 	"fmt"
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
-	"github.com/fsnotify/fsnotify"
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
-	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
+
+	"github.com/fsnotify/fsnotify"
+	"golang.org/x/net/context"
+	"google.golang.org/grpc"
+	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
+	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
 )
 
 type resourcesServerPort struct {

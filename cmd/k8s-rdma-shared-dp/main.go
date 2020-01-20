@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 	"log"
 	"syscall"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 )
 
 const (

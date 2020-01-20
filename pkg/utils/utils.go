@@ -2,9 +2,10 @@ package utils
 
 import (
 	"fmt"
-	"github.com/Mellanox/rdmamap"
 	"os"
 	"path"
+
+	"github.com/Mellanox/rdmamap"
 )
 
 var (
