@@ -41,3 +41,26 @@
   name = "github.com/Mellanox/rdmamap"
   revision = "7c3c4763a6ee6a4d624fe133135dc3a7c483111c"
   source = "https://github.com/Mellanox/rdmamap.git"
+
+[[override]]
+  name = "github.com/vishvananda/netlink"
+  revision = "f049be6f391489d3f374498fe0c8df8449258372"
+  source = "https://github.com/vishvananda/netlink.git"
+
+[[override]]
+  name = "github.com/vishvananda/netns"
+  revision = "0a2b9b5464df8343199164a0321edf3313202f7e"
+  source = "https://github.com/vishvananda/netns.git"
+
+[[override]]
+  name = "golang.org/x/sys"
+  source = "https://github.com/golang/sys.git"
+  revision = "fde4db37ae7ad8191b03d30d27f258b5291ae4e3"
+
+[[override]]
+  name = "gopkg.in/fsnotify.v1"
+  source = "https://github.com/fsnotify/fsnotify.git"
+
+[[override]]
+  name = "google.golang.org/genproto"
+  source = "https://github.com/googleapis/go-genproto.git"

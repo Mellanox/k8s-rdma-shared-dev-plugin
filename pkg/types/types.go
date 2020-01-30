@@ -1,6 +1,11 @@
 package types
 
 import (
+	"net"
+	"os"
+	"time"
+
+	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
 )
 
@@ -22,7 +27,7 @@ type ResourceServer interface {
 	Start() error
 	Stop() error
 	Restart() error
-	Watch()
+	Watch() error
 }
 
 // ResourceManager manger multi plugins
@@ -33,4 +38,22 @@ type ResourceManager interface {
 	StartAllServers() error
 	StopAllServers() error
 	RestartAllServers() error
+}
+
+// ResourceServerPort to connect the resources server to k8s
+type ResourceServerPort interface {
+	GetServer() *grpc.Server
+	CreateServer()
+	DeleteServer()
+	Listen(string, string) (net.Listener, error)
+	Serve(net.Listener)
+	Stop()
+	Close(*grpc.ClientConn)
+	Register(pluginapi.RegistrationClient, *pluginapi.RegisterRequest) error
+	Dial(string, time.Duration) (*grpc.ClientConn, error)
+}
+
+// NotifierFactory register signals to listen for
+type SignalNotifier interface {
+	Notify() chan os.Signal
 }

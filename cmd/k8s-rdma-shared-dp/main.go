@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 	"log"
 	"syscall"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 )
 
 const (
@@ -38,7 +39,8 @@ func main() {
 
 	log.Println("Listening for term signals")
 	log.Println("Starting OS watcher.")
-	sigs := resources.NewOSWatcher(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signalsNotifier := resources.NewSignalNotifier(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	sigs := signalsNotifier.Notify()
 
 	s := <-sigs
 	switch s {

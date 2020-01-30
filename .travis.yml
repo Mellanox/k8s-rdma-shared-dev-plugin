@@ -1,9 +1,15 @@
 language: go
 sudo: required
 
+before_script:
+  - go get github.com/mattn/goveralls
+
 script:
 
   - make lint
+  - sudo -E env "PATH=$PATH" make test
+  - sudo -E env "PATH=$PATH" make test-coverage
+  - for pkg in `ls test/coverage/*.cover`; do goveralls -coverprofile=$pkg -service=travis-ci; done
   - make build
   - make image
 
