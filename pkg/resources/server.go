@@ -15,8 +15,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
-	pluginapi "k8s.io/kubernetes/pkg/kubelet/apis/deviceplugin/v1beta1"
-	registerapi "k8s.io/kubernetes/pkg/kubelet/apis/pluginregistration/v1"
+	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
+	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
 type resourcesServerPort struct {
