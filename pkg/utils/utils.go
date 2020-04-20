@@ -34,11 +34,10 @@ func GetPciAddress(ifName string) (string, error) {
 	return pciAddress, nil
 }
 
-//GetRdmaDevices return rdma devices for given device pci address
+// GetRdmaDevices return rdma devices for given device pci address
 func GetRdmaDevices(pciAddress string) []string {
-	var rdmaDevices []string
-
 	rdmaResources := rdmamap.GetRdmaDevicesForPcidev(pciAddress)
+	rdmaDevices := make([]string, 0, len(rdmaResources))
 	for _, resource := range rdmaResources {
 		rdmaResourceDevices := rdmamap.GetRdmaCharDevices(resource)
 		rdmaDevices = append(rdmaDevices, rdmaResourceDevices...)
