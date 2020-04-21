@@ -1,3 +1,8 @@
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Mellanox/k8s-rdma-shared-dev-plugin)](https://goreportcard.com/report/github.com/Mellanox/rdma-cni)
+[![Build Status](https://travis-ci.com/Mellanox/k8s-rdma-shared-dev-plugin.svg?branch=master)](https://travis-ci.com/Mellanox/k8s-rdma-shared-dev-plugin)
+[![Coverage Status](https://coveralls.io/repos/github/Mellanox/k8s-rdma-shared-dev-plugin/badge.svg)](https://coveralls.io/github/Mellanox/k8s-rdma-shared-dev-plugin)
+
 # k8s-rdma-shared-dev-plugin
 (https://hub.docker.com/r/rdma/k8s-rdma-shared-dev-plugin)
 
