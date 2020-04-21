@@ -25,22 +25,21 @@ func (fs *FakeFilesystem) Use() func() {
 	fs.RootDir = tmpDir
 
 	for _, dir := range fs.Dirs {
-		err := os.MkdirAll(path.Join(fs.RootDir, dir), 0755)
-		if err != nil {
-			panic(fmt.Errorf("error creating fake directory: %s", err.Error()))
+		osErr := os.MkdirAll(path.Join(fs.RootDir, dir), 0755)
+		if osErr != nil {
+			panic(fmt.Errorf("error creating fake directory: %s", osErr.Error()))
 		}
-
 	}
 	for filename, body := range fs.Files {
-		err := ioutil.WriteFile(path.Join(fs.RootDir, filename), body, 0644)
-		if err != nil {
-			panic(fmt.Errorf("error creating fake file: %s", err.Error()))
+		ioErr := ioutil.WriteFile(path.Join(fs.RootDir, filename), body, 0644)
+		if ioErr != nil {
+			panic(fmt.Errorf("error creating fake file: %s", ioErr.Error()))
 		}
 	}
 	for link, target := range fs.Symlinks {
-		err = os.Symlink(target, path.Join(fs.RootDir, link))
-		if err != nil {
-			panic(fmt.Errorf("error creating fake symlink: %s", err.Error()))
+		osErr := os.Symlink(target, path.Join(fs.RootDir, link))
+		if osErr != nil {
+			panic(fmt.Errorf("error creating fake symlink: %s", osErr.Error()))
 		}
 	}
 

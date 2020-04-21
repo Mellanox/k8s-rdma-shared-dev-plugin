@@ -19,6 +19,11 @@ import (
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
 
+const (
+	// Local use
+	cDialTimeout = 5 * time.Second
+)
+
 type resourcesServerPort struct {
 	server *grpc.Server
 }
@@ -98,8 +103,8 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 }
 
 // newResourceServer returns an initialized server
-func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (types.ResourceServer, error) {
-
+func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (
+	types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
 
@@ -178,8 +183,8 @@ func (m *resourceServer) Start() error {
 
 	m.rsConnector.Serve(sock)
 
-	// Wait for server to start by launching a blocking connexion
-	conn, err := m.rsConnector.Dial(m.socketPath, 5*time.Second)
+	// Wait for server to start by launching a blocking connection
+	conn, err := m.rsConnector.Dial(m.socketPath, cDialTimeout)
 	if err != nil {
 		return err
 	}
@@ -253,7 +258,7 @@ func (m *resourceServer) Watch() error {
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (m *resourceServer) register() error {
 	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
-	conn, err := m.rsConnector.Dial(kubeletEndpoint, 5*time.Second)
+	conn, err := m.rsConnector.Dial(kubeletEndpoint, cDialTimeout)
 	if err != nil {
 		return err
 	}
@@ -287,7 +292,8 @@ func (m *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlug
 }
 
 // Allocate which return list of devices.
-func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (*pluginapi.AllocateResponse, error) {
+func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (
+	*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
@@ -307,14 +313,16 @@ func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequ
 }
 
 // GetDevicePluginOptions returns options to be communicated with Device Manager
-func (m *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
+func (m *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (
+	*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
 	}, nil
 }
 
 // PreStartContainer is called, if indicated by Device Plugin during registeration phase
-func (m *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (*pluginapi.PreStartContainerResponse, error) {
+func (m *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (
+	*pluginapi.PreStartContainerResponse, error) {
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
@@ -338,7 +346,8 @@ func (m *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoReque
 }
 
 // NotifyRegistrationStatus notify for registration status
-func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (*registerapi.RegistrationStatusResponse, error) {
+func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (
+	*registerapi.RegistrationStatusResponse, error) {
 	if regstat.PluginRegistered {
 		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)
 	} else {

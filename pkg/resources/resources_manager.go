@@ -56,7 +56,7 @@ func (rm *resourceManager) ReadConfig() error {
 	}
 
 	config := &types.UserConfigList{}
-	if err = json.Unmarshal(raw, config); err != nil {
+	if err := json.Unmarshal(raw, config); err != nil {
 		return err
 	}
 
@@ -79,7 +79,6 @@ func (rm *resourceManager) ValidateConfigs() error {
 		// check if name contains acceptable characters
 		if !validResourceName(conf.ResourceName) {
 			return fmt.Errorf("error: resource name \"%s\" contains invalid characters", conf.ResourceName)
-
 		}
 		// check resource names are unique
 		_, ok := resourceName[conf.ResourceName]
