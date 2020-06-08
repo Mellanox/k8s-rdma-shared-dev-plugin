@@ -57,3 +57,8 @@ type ResourceServerPort interface {
 type SignalNotifier interface {
 	Notify() chan os.Signal
 }
+
+// RdmaDeviceSpec used to find the rdma devices
+type RdmaDeviceSpec interface {
+	Get(string) []*pluginapi.DeviceSpec
+}

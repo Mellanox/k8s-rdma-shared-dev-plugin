@@ -103,7 +103,8 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 }
 
 // newResourceServer returns an initialized server
-func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string) (
+func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string,
+	rds types.RdmaDeviceSpec) (
 	types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
@@ -114,26 +115,30 @@ func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefi
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
 	}
 
-	for n := 0; n < config.RdmaHcaMax; n++ {
-		id := n
-		dpDevice := &pluginapi.Device{
-			ID:     strconv.Itoa(id),
-			Health: pluginapi.Healthy,
-		}
-		devs = append(devs, dpDevice)
-	}
-
 	for _, device := range config.Devices {
 		pciAddress, err := utils.GetPciAddress(device)
 		// Skip non existing devices
 		if err != nil {
 			continue
 		}
-		rdmaDeviceSpec := getRdmaDeviceSpec(pciAddress)
+		rdmaDeviceSpec := rds.Get(pciAddress)
 		if len(rdmaDeviceSpec) == 0 {
 			log.Printf("Warning: non-Rdma Device %s\n", device)
 		}
 		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
+	}
+
+	if len(deviceSpec) > 0 {
+		for n := 0; n < config.RdmaHcaMax; n++ {
+			id := n
+			dpDevice := &pluginapi.Device{
+				ID:     strconv.Itoa(id),
+				Health: pluginapi.Healthy,
+			}
+			devs = append(devs, dpDevice)
+		}
+	} else {
+		log.Printf("Warning: no Rdma Devices were found for resource %s\n", config.ResourceName)
 	}
 
 	if !watcherMode {
@@ -355,18 +360,4 @@ func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *
 		m.rsConnector.Stop()
 	}
 	return &registerapi.RegistrationStatusResponse{}, nil
-}
-
-func getRdmaDeviceSpec(pciAddress string) []*pluginapi.DeviceSpec {
-	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
-
-	rdmaDevices := utils.GetRdmaDevices(pciAddress)
-	for _, device := range rdmaDevices {
-		deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
-			HostPath:      device,
-			ContainerPath: device,
-			Permissions:   "rwm"})
-	}
-
-	return deviceSpec
 }
