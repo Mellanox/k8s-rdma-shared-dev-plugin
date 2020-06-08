@@ -73,3 +73,27 @@ EOF
 ```
 kubectl create -f <rdma-app.yaml>
 ```
+
+# RDMA shared device plugin deployment with node labels
+
+RDMA shared device plugin should be deployed on nodes that:
+
+1. Have RDMA capable hardware
+2. RDMA kernel stack is loaded
+
+To allow proper node selection [Node Feature Discovery (NFD)](https://github.com/kubernetes-sigs/node-feature-discovery) can be used to discover the node capabilities, and expose them as node labels.
+
+1. Deploy NFD, release `v0.6.0` or new newer
+
+```
+# export NFD_VERSION=v0.6.0
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-master.yaml.template
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/node-feature-discovery/$NFD_VERSION/nfd-worker-daemonset.yaml.template
+```
+
+2. Check the new labels added to the node
+```
+# kubectl get nodes --show-labels
+```
+
+RDMA device plugin can then be deployed on nodes with `feature.node.kubernetes.io/custom-rdma.available=true`, which indicates that the node is RDMA capable and RDMA modules are loaded.
