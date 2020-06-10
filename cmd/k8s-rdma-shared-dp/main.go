@@ -1,18 +1,40 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"log"
+	"os"
 	"syscall"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 )
 
-const (
-	rdmaSharedDpVersion = "0.2"
+var (
+	version = "master@git"
+	commit  = "unknown commit"
+	date    = "unknown date"
 )
 
+func printVersionString() string {
+	return fmt.Sprintf("k8s-rdma-shared-dev-plugin version:%s, commit:%s, date:%s", version, commit, date)
+}
+
 func main() {
-	log.Println("Starting K8s RDMA Shared Device Plugin version=", rdmaSharedDpVersion)
+	// Init command line flags to clear vendor packages' flags, especially in init()
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// add version flag
+	versionOpt := false
+	flag.BoolVar(&versionOpt, "version", false, "Show application version")
+	flag.BoolVar(&versionOpt, "v", false, "Show application version")
+	flag.Parse()
+	if versionOpt {
+		fmt.Printf("%s\n", printVersionString())
+		return
+	}
+
+	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
 	rm := resources.NewResourceManager()
 
