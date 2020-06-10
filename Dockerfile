@@ -5,7 +5,7 @@ ADD . /usr/src/k8s-rdma-shared-dp
 ENV HTTP_PROXY $http_proxy
 ENV HTTPS_PROXY $https_proxy
 
-RUN apk add --update --virtual build-dependencies build-base linux-headers && \
+RUN apk add --update --virtual build-dependencies build-base linux-headers git && \
     cd /usr/src/k8s-rdma-shared-dp && \
     make clean && \
     make build
