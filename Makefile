@@ -24,7 +24,7 @@ LDFLAGS="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE
 IMAGE_BUILDER?=@docker
 IMAGEDIR=$(BASE)/images
 DOCKERFILE?=$(CURDIR)/Dockerfile
-TAG?=rdma/k8s-rdma-shared-dev-plugin
+TAG?=mellanox/k8s-rdma-shared-dev-plugin
 IMAGE_BUILD_OPTS?=
 # Accept proxy settings for docker
 # To pass proxy for Docker invoke it as 'make image HTTP_POXY=http://192.168.0.1:8080'
