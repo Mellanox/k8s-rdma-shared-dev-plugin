@@ -4,7 +4,7 @@ go:
   - "1.13"
 
 env:
-  - IMAGE_NAME=rdma/k8s-rdma-shared-dev-plugin
+  - IMAGE_NAME=mellanox/k8s-rdma-shared-dev-plugin
 
 go:
   - 1.13.x
