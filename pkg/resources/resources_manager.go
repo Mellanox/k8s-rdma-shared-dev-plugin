@@ -105,7 +105,7 @@ func (rm *resourceManager) ValidateConfigs() error {
 func (rm *resourceManager) InitServers() error {
 	for _, config := range rm.configList {
 		log.Printf("Resource: %v\n", config)
-		rs, err := newResourceServer(config, rm.watchMode, rm.resourcePrefix, rm.socketSuffix)
+		rs, err := newResourceServer(config, rm.watchMode, rm.resourcePrefix, rm.socketSuffix, &rdmaDeviceSpec{})
 		if err != nil {
 			return err
 		}
