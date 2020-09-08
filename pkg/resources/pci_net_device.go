@@ -1,6 +1,9 @@
 package resources
 
 import (
+	"log"
+
+	"github.com/jaypipes/ghw"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
@@ -15,10 +18,19 @@ type pciNetDevice struct {
 }
 
 // NewPciNetDevice returns an instance of PciNetDevice interface
-func NewPciNetDevice(ifName string, rds types.RdmaDeviceSpec) (types.PciNetDevice, error) {
-	pciAddr, err := utils.GetPciAddress(ifName)
-	if err != nil {
-		return nil, err
+func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec) types.PciNetDevice {
+	var ifName string
+
+	pciAddr := dev.Address
+	netDevs, _ := utils.GetNetNames(pciAddr)
+	if len(netDevs) == 0 {
+		ifName = ""
+	} else {
+		ifName = netDevs[0]
+		if len(netDevs) > 1 {
+			log.Printf("Warning: found several names for device %s %v, using first name %s", pciAddr, netDevs,
+				ifName)
+		}
 	}
 
 	rdmaSpec := rds.Get(pciAddr)
@@ -27,7 +39,7 @@ func NewPciNetDevice(ifName string, rds types.RdmaDeviceSpec) (types.PciNetDevic
 		pciAddress: pciAddr,
 		ifName:     ifName,
 		rdmaSpec:   rdmaSpec,
-	}, nil
+	}
 }
 
 func (nd *pciNetDevice) GetIfName() string {

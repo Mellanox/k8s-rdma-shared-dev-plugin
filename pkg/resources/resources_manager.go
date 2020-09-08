@@ -6,15 +6,25 @@ import (
 	"io/ioutil"
 	"log"
 	"regexp"
+	"strconv"
+
+	"github.com/jaypipes/ghw"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 )
 
 const (
+	// General constants
 	configFilePath        = "/k8s-rdma-shared-dev-plugin/config.json"
 	kubeEndPoint          = "kubelet.sock"
 	socketSuffix          = "sock"
 	rdmaHcaResourcePrefix = "rdma"
+
+	// PCI related constants
+	netClass             = 0x02 // Device class - Network controller
+	maxVendorNameLength  = 20
+	maxProductNameLength = 40
 )
 
 var (
@@ -30,6 +40,7 @@ type resourceManager struct {
 	watchMode       bool
 	configList      []*types.UserConfig
 	resourceServers []types.ResourceServer
+	deviceList      []*ghw.PCIDevice
 }
 
 func NewResourceManager() types.ResourceManager {
@@ -105,7 +116,14 @@ func (rm *resourceManager) ValidateConfigs() error {
 func (rm *resourceManager) InitServers() error {
 	for _, config := range rm.configList {
 		log.Printf("Resource: %v\n", config)
-		rs, err := newResourceServer(config, rm.watchMode, rm.resourcePrefix, rm.socketSuffix, &rdmaDeviceSpec{})
+		devices := rm.GetDevices()
+		filteredDevices := utils.FilterNetDevs(devices, config.Devices)
+
+		if len(filteredDevices) == 0 {
+			log.Printf("Warning: no devices in device pool, creating empty resource server for %s", config.ResourceName)
+		}
+
+		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.resourcePrefix, rm.socketSuffix)
 		if err != nil {
 			return err
 		}
@@ -157,4 +175,56 @@ func validResourceName(name string) bool {
 	// name regex
 	var validString = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 	return validString.MatchString(name)
+}
+
+func (rm *resourceManager) DiscoverHostDevices() error {
+	log.Println("discovering host network devices")
+	pci, err := ghw.PCI()
+	if err != nil {
+		return fmt.Errorf("error getting PCI info: %v", err)
+	}
+
+	devices := pci.ListDevices()
+	if len(devices) == 0 {
+		log.Println("Warning: DiscoverHostDevices(): no PCI network device found")
+	}
+
+	for _, device := range devices {
+		devClass, err := strconv.ParseInt(device.Class.ID, 16, 64)
+		if err != nil {
+			log.Printf("Warning: DiscoverHostDevices(): unable to parse device class for device %+v %q", device, err)
+			continue
+		}
+
+		if devClass != netClass {
+			continue
+		}
+
+		vendor := device.Vendor
+		vendorName := vendor.Name
+		if len(vendor.Name) > maxVendorNameLength {
+			vendorName = string([]byte(vendorName)[0:17]) + "..."
+		}
+		product := device.Product
+		productName := product.Name
+		if len(product.Name) > maxProductNameLength {
+			productName = string([]byte(productName)[0:37]) + "..."
+		}
+		log.Printf("DiscoverHostDevices(): device found: %-12s\t%-12s\t%-20s\t%-40s", device.Address,
+			device.Class.ID, vendorName, productName)
+
+		rm.deviceList = append(rm.deviceList, device)
+	}
+
+	return nil
+}
+
+func (rm *resourceManager) GetDevices() []types.PciNetDevice {
+	newPciDevices := make([]types.PciNetDevice, 0)
+	rds := &rdmaDeviceSpec{}
+	for _, device := range rm.deviceList {
+		newDevice := NewPciNetDevice(device, rds)
+		newPciDevices = append(newPciDevices, newDevice)
+	}
+	return newPciDevices
 }

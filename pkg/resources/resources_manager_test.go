@@ -2,12 +2,14 @@ package resources
 
 import (
 	"errors"
+	"os"
 	"path"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types/mocks"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 
+	"github.com/jaypipes/ghw"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -186,6 +188,49 @@ var _ = Describe("ResourcesManger", func() {
 			err := rm.ValidateConfigs()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("error: no devices provided"))
+		})
+	})
+	Context("GetDevices", func() {
+		It("Get full list of devices", func() {
+			deviceList := []*ghw.PCIDevice{{Address: "0000:02:00.0"},
+				{Address: "0000:03:00.0"}}
+			rm := &resourceManager{deviceList: deviceList}
+			Expect(len(rm.GetDevices())).To(Equal(2))
+		})
+	})
+	Context("DiscoverHostDevices", func() {
+		It("Discover devices in host", func() {
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{
+					"sys/bus/pci/devices/0000:02:00.0",
+					"sys/bus/pci/devices/0000:08:00.0"},
+				Files: map[string][]byte{
+					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+					"sys/bus/pci/devices/0000:08:00.0/modalias": []byte(
+						"pci:v00008086d00001D02sv000015D9sd00000717bc01sc06i01")},
+			}
+			defer fs.Use()()
+			os.Setenv("GHW_CHROOT", fs.RootDir)
+			defer os.Unsetenv("GHW_CHROOT")
+
+			rm := &resourceManager{}
+
+			err := rm.DiscoverHostDevices()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(rm.deviceList)).To(Equal(1))
+		})
+		It("Discover zero devices in host", func() {
+			fs := &utils.FakeFilesystem{}
+			defer fs.Use()()
+			os.Setenv("GHW_CHROOT", fs.RootDir)
+			defer os.Unsetenv("GHW_CHROOT")
+
+			rm := &resourceManager{}
+
+			err := rm.DiscoverHostDevices()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(len(rm.deviceList)).To(BeZero())
 		})
 	})
 	Context("InitServers", func() {

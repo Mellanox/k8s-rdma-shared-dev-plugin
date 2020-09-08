@@ -102,8 +102,8 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 }
 
 // newResourceServer returns an initialized server
-func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefix, socketSuffix string,
-	rds types.RdmaDeviceSpec) (
+func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool, resourcePrefix,
+	socketSuffix string) (
 	types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
@@ -114,15 +114,10 @@ func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefi
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
 	}
 
-	for _, device := range config.Devices {
-		dev, err := NewPciNetDevice(device, rds)
-		// Skip non existing devices
-		if err != nil {
-			continue
-		}
-		rdmaDeviceSpec := dev.GetRdmaSpec()
+	for _, device := range devices {
+		rdmaDeviceSpec := device.GetRdmaSpec()
 		if len(rdmaDeviceSpec) == 0 {
-			log.Printf("Warning: non-Rdma Device %s\n", dev.GetPciAddr())
+			log.Printf("Warning: non-Rdma Device %s\n", device.GetPciAddr())
 		}
 		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
 	}

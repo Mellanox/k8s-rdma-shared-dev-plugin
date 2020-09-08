@@ -6,6 +6,7 @@ require (
 	github.com/Mellanox/rdmamap v1.0.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/jaypipes/ghw v0.6.1
 	github.com/onsi/ginkgo v1.11.0
 	github.com/onsi/gomega v1.8.1
 	github.com/stretchr/objx v0.1.1 // indirect

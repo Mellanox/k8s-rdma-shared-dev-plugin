@@ -34,9 +34,10 @@ func (x *devPluginListAndWatchServerMock) Send(m *pluginapi.ListAndWatchResponse
 }
 
 var _ = Describe("resourceServer tests", func() {
-	fakeRdmaDeviceSpec := &mocks.RdmaDeviceSpec{}
 	fakeDeviceSpec := []*pluginapi.DeviceSpec{{HostPath: "fake", ContainerPath: "fake"}}
-	fakeRdmaDeviceSpec.On("Get", mock.Anything).Return(fakeDeviceSpec)
+	fakePciDevice := &mocks.PciNetDevice{}
+	fakePciDevice.On("GetRdmaSpec").Return(fakeDeviceSpec)
+	fakeDeviceList := []types.PciNetDevice{fakePciDevice}
 	Context("newResourcesServer", func() {
 		It("server with plugin watcher enabled", func() {
 			fs := utils.FakeFilesystem{
@@ -44,8 +45,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100, Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, true, "rdma", "socket", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -59,8 +60,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0, Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, true, "rdma", "socket", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -74,10 +75,12 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100, Devices: []string{"ib0"}}
-			rf := &mocks.RdmaDeviceSpec{}
-			rf.On("Get", mock.Anything).Return([]*pluginapi.DeviceSpec{})
-			obj, err := newResourceServer(conf, true, "rdma", "socket", rf)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
+			fakePciDevice := &mocks.PciNetDevice{}
+			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
+			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
+			deviceList := []types.PciNetDevice{fakePciDevice}
+			obj, err := newResourceServer(conf, deviceList, true, "rdma", "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -91,8 +94,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100, Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, false, "rdma", "socket", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -106,8 +109,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0, Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, false, "rdma", "socket", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0}
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -116,8 +119,8 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(len(rs.devs)).To(Equal(0))
 		})
 		It("server with plugin with invalid max number of resources", func() {
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: -100, Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, true, "rdma", "socket", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: -100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
 			Expect(err).To(HaveOccurred())
 			Expect(obj).To(BeNil())
 		})
@@ -382,8 +385,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{RdmaHcaMax: 100, ResourceName: "fake", Devices: []string{"ib0"}}
-			obj, err := newResourceServer(conf, true, "fake", "fake", fakeRdmaDeviceSpec)
+			conf := &types.UserConfig{RdmaHcaMax: 100, ResourceName: "fake"}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake", "fake")
 			Expect(err).ToNot(HaveOccurred())
 
 			rs := obj.(*resourceServer)

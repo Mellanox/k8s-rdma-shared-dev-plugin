@@ -34,6 +34,8 @@ type ResourceServer interface {
 type ResourceManager interface {
 	ReadConfig() error
 	ValidateConfigs() error
+	DiscoverHostDevices() error
+	GetDevices() []PciNetDevice
 	InitServers() error
 	StartAllServers() error
 	StopAllServers() error

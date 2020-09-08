@@ -47,6 +47,11 @@ func main() {
 		log.Fatalf("Exiting.. one or more invalid configuration(s) given: %v", err)
 	}
 
+	log.Println("Discovering host devices")
+	if err := rm.DiscoverHostDevices(); err != nil {
+		log.Fatalf("Error: error discovering host devices %v \n", err)
+	}
+
 	log.Println("Initializing resource servers")
 	if err := rm.InitServers(); err != nil {
 		log.Fatalf("Error: initializing resource servers %v \n", err)
