@@ -9,14 +9,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
-
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 )
 
 const (
@@ -116,14 +115,14 @@ func newResourceServer(config *types.UserConfig, watcherMode bool, resourcePrefi
 	}
 
 	for _, device := range config.Devices {
-		pciAddress, err := utils.GetPciAddress(device)
+		dev, err := NewPciNetDevice(device, rds)
 		// Skip non existing devices
 		if err != nil {
 			continue
 		}
-		rdmaDeviceSpec := rds.Get(pciAddress)
+		rdmaDeviceSpec := dev.GetRdmaSpec()
 		if len(rdmaDeviceSpec) == 0 {
-			log.Printf("Warning: non-Rdma Device %s\n", device)
+			log.Printf("Warning: non-Rdma Device %s\n", dev.GetPciAddr())
 		}
 		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
 	}

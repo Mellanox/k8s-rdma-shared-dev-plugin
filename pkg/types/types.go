@@ -62,3 +62,10 @@ type SignalNotifier interface {
 type RdmaDeviceSpec interface {
 	Get(string) []*pluginapi.DeviceSpec
 }
+
+// PciNetDevice provides an interface to get generic device specific information
+type PciNetDevice interface {
+	GetPciAddr() string
+	GetIfName() string
+	GetRdmaSpec() []*pluginapi.DeviceSpec
+}
