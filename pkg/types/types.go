@@ -9,11 +9,17 @@ import (
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
+// Selectors contains common device selectors fields
+type Selectors struct {
+	IfNames []string `json:"ifNames,omitempty"`
+}
+
 // UserConfig configuration for device plugin
 type UserConfig struct {
-	ResourceName string   `json:"resourceName"`
-	RdmaHcaMax   int      `json:"rdmaHcaMax"`
-	Devices      []string `json:"devices"`
+	ResourceName string    `json:"resourceName"`
+	RdmaHcaMax   int       `json:"rdmaHcaMax"`
+	Devices      []string  `json:"devices"`
+	Selectors    Selectors `json:"selectors"`
 }
 
 // UserConfigList config list for servers
@@ -40,6 +46,7 @@ type ResourceManager interface {
 	StartAllServers() error
 	StopAllServers() error
 	RestartAllServers() error
+	GetFilteredDevices(devices []PciNetDevice, selector Selectors) []PciNetDevice
 }
 
 // ResourceServerPort to connect the resources server to k8s
@@ -70,4 +77,9 @@ type PciNetDevice interface {
 	GetPciAddr() string
 	GetIfName() string
 	GetRdmaSpec() []*pluginapi.DeviceSpec
+}
+
+// DeviceSelector provides an interface for filtering a list of devices
+type DeviceSelector interface {
+	Filter([]PciNetDevice) []PciNetDevice
 }

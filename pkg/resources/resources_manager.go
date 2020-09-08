@@ -102,8 +102,18 @@ func (rm *resourceManager) ValidateConfigs() error {
 			return fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", conf.RdmaHcaMax)
 		}
 
-		if len(conf.Devices) == 0 {
-			return fmt.Errorf("error: no devices provided")
+		isEmptySelector := utils.IsEmptySelector(conf.Selectors)
+		if isEmptySelector && len(conf.Devices) == 0 {
+			return fmt.Errorf("error: configuration missmatch. neither \"selectors\" nor \"devices\" fields exits," +
+				" it is recommended to use the new “selectors” field")
+		}
+
+		// If both "selectors" and "devices" fields are provided then fail with confusion
+		if !isEmptySelector && len(conf.Devices) > 0 {
+			return fmt.Errorf("configuration mismatch. Cannot specify both \"selectors\" and \"devices\" fields")
+		} else if isEmptySelector { // If no "selector" then use devices as IfNames selector
+			log.Println("Warning: \"devices\" field is deprecated, it is recommended to use the new “selectors” field")
+			conf.Selectors.IfNames = conf.Devices
 		}
 
 		resourceName[conf.ResourceName] = conf.ResourceName
@@ -115,9 +125,9 @@ func (rm *resourceManager) ValidateConfigs() error {
 // InitServers init server
 func (rm *resourceManager) InitServers() error {
 	for _, config := range rm.configList {
-		log.Printf("Resource: %v\n", config)
+		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
-		filteredDevices := utils.FilterNetDevs(devices, config.Devices)
+		filteredDevices := rm.GetFilteredDevices(devices, config.Selectors)
 
 		if len(filteredDevices) == 0 {
 			log.Printf("Warning: no devices in device pool, creating empty resource server for %s", config.ResourceName)
@@ -192,7 +202,8 @@ func (rm *resourceManager) DiscoverHostDevices() error {
 	for _, device := range devices {
 		devClass, err := strconv.ParseInt(device.Class.ID, 16, 64)
 		if err != nil {
-			log.Printf("Warning: DiscoverHostDevices(): unable to parse device class for device %+v %q", device, err)
+			log.Printf("Warning: DiscoverHostDevices(): unable to parse device class for device %+v %q", device,
+				err)
 			continue
 		}
 
@@ -227,4 +238,18 @@ func (rm *resourceManager) GetDevices() []types.PciNetDevice {
 		newPciDevices = append(newPciDevices, newDevice)
 	}
 	return newPciDevices
+}
+
+func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
+	selector types.Selectors) []types.PciNetDevice {
+	filteredDevice := devices
+	// filter by IfNames list
+	if selector.IfNames != nil && len(selector.IfNames) > 0 {
+		filteredDevice = NewIfNameSelector(selector.IfNames).Filter(filteredDevice)
+	}
+
+	newDeviceList := make([]types.PciNetDevice, len(filteredDevice))
+	copy(newDeviceList, filteredDevice)
+
+	return newDeviceList
 }

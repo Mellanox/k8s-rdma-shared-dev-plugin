@@ -103,8 +103,7 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 
 // newResourceServer returns an initialized server
 func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool, resourcePrefix,
-	socketSuffix string) (
-	types.ResourceServer, error) {
+	socketSuffix string) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
 

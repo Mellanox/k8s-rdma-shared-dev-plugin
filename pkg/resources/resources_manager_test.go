@@ -55,7 +55,7 @@ var _ = Describe("ResourcesManger", func() {
            {
              "resourceName": "hca_shared_devices_b",
              "rdmaHcaMax": 500,
-             "devices": ["ib3", "ib4"]
+             "selectors": {"ifNames": ["ib2", "ib3"]}
            }
         ]}`
 			fs := &utils.FakeFilesystem{
@@ -70,6 +70,8 @@ var _ = Describe("ResourcesManger", func() {
 			err := rm.ReadConfig()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rm.configList)).To(Equal(2))
+			Expect(len(rm.configList[0].Devices)).To(Equal(2))
+			Expect(len(rm.configList[1].Selectors.IfNames)).To(Equal(2))
 		})
 		It("non existing config file", func() {
 
@@ -98,7 +100,7 @@ var _ = Describe("ResourcesManger", func() {
 		})
 	})
 	Context("ValidateConfigs", func() {
-		It("Valid config list", func() {
+		It("Valid config list with \"devices\" field", func() {
 			var configlist []*types.UserConfig
 			rm := &resourceManager{}
 
@@ -106,6 +108,20 @@ var _ = Describe("ResourcesManger", func() {
 				ResourceName: "test_config",
 				RdmaHcaMax:   100,
 				Devices:      []string{"ib0"}})
+
+			rm.configList = configlist
+			err := rm.ValidateConfigs()
+			Expect(err).ToNot(HaveOccurred())
+		})
+		It("Valid config list  \"selectors\" field", func() {
+			var configlist []*types.UserConfig
+			rm := &resourceManager{}
+
+			configlist = append(configlist, &types.UserConfig{
+				ResourceName: "test_config",
+				RdmaHcaMax:   100,
+				Selectors:    types.Selectors{IfNames: []string{"eth1"}},
+			})
 
 			rm.configList = configlist
 			err := rm.ValidateConfigs()
@@ -176,18 +192,33 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("error: Invalid value for rdmaHcaMax < 0: -100"))
 		})
-		It("resources with no devices", func() {
+		It("configuration mismatch between \"selectors\" and \"devices\"", func() {
 			var configlist []*types.UserConfig
 			rm := &resourceManager{}
 
 			configlist = append(configlist, &types.UserConfig{
 				ResourceName: "test_config",
-				RdmaHcaMax:   100})
+				RdmaHcaMax:   100,
+				Devices:      []string{"eth0"},
+				Selectors:    types.Selectors{IfNames: []string{"eth1"}},
+			})
 
 			rm.configList = configlist
 			err := rm.ValidateConfigs()
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("error: no devices provided"))
+		})
+		It("resources configuration with neither \"selectors\" nor \"devices\"", func() {
+			var configlist []*types.UserConfig
+			rm := &resourceManager{}
+
+			configlist = append(configlist, &types.UserConfig{
+				ResourceName: "test_config",
+				RdmaHcaMax:   100,
+			})
+
+			rm.configList = configlist
+			err := rm.ValidateConfigs()
+			Expect(err).To(HaveOccurred())
 		})
 	})
 	Context("GetDevices", func() {
@@ -196,6 +227,29 @@ var _ = Describe("ResourcesManger", func() {
 				{Address: "0000:03:00.0"}}
 			rm := &resourceManager{deviceList: deviceList}
 			Expect(len(rm.GetDevices())).To(Equal(2))
+		})
+	})
+	Context("GetFilteredDevices", func() {
+		It("Get full list of devices", func() {
+			dev1 := &mocks.PciNetDevice{}
+			dev2 := &mocks.PciNetDevice{}
+			dev3 := &mocks.PciNetDevice{}
+			dev4 := &mocks.PciNetDevice{}
+			dev1.On("GetIfName").Return("enp2s0f0")
+			dev2.On("GetIfName").Return("enp2s0f1")
+			dev3.On("GetIfName").Return("eth0")
+			dev4.On("GetIfName").Return("eth1")
+			devices := []types.PciNetDevice{dev1, dev2, dev3, dev4}
+
+			selectors := types.Selectors{
+				IfNames: []string{"enp2s0f0", "enp2s0f1"},
+			}
+			rm := &resourceManager{}
+			filteredDevices := rm.GetFilteredDevices(devices, selectors)
+
+			Expect(len(filteredDevices)).To(Equal(2))
+			Expect(filteredDevices[0]).To(Equal(dev1))
+			Expect(filteredDevices[1]).To(Equal(dev2))
 		})
 	})
 	Context("DiscoverHostDevices", func() {

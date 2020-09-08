@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"reflect"
 
 	"github.com/Mellanox/rdmamap"
 
@@ -49,6 +50,18 @@ func GetRdmaDevices(pciAddress string) []string {
 	}
 
 	return rdmaDevices
+}
+
+// IsEmptySelector returns if the selector is empty
+func IsEmptySelector(selector types.Selectors) bool {
+	values := reflect.ValueOf(selector)
+
+	for i := 0; i < values.NumField(); i++ {
+		if values.Field(i).Len() > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // GetNetNames returns host net interface names as string for a PCI device from its pci address
