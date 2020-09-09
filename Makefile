@@ -48,7 +48,7 @@ TIMEOUT = 15
 Q = $(if $(filter 1,$V),,@)
 
 .PHONY: all
-all: lint build
+all: lint build test
 
 $(BASE): ; $(info  setting GOPATH...)
 	@mkdir -p $(dir $@)
@@ -91,10 +91,10 @@ test-verbose: ARGS=-v            ## Run tests in verbose mode with coverage repo
 test-race:    ARGS=-race         ## Run tests with race detector
 $(TEST_TARGETS): NAME=$(MAKECMDGOALS:test-%=%)
 $(TEST_TARGETS): test
-check test tests: lint | $(BASE) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests
+check test tests: | $(BASE) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests
 	$Q cd $(BASE) && $(GO) test -timeout $(TIMEOUT)s $(ARGS) $(TESTPKGS)
 
-test-xml: lint | $(BASE) $(GO2XUNIT) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests with xUnit output
+test-xml: | $(BASE) $(GO2XUNIT) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests with xUnit output
 	$Q cd $(BASE) && 2>&1 $(GO) test -timeout 20s -v $(TESTPKGS) | tee test/tests.output
 	$(GO2XUNIT) -fail -input test/tests.output -output test/tests.xml
 
