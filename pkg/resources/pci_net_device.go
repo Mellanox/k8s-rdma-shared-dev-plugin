@@ -14,6 +14,7 @@ import (
 type pciNetDevice struct {
 	pciAddress string
 	ifName     string
+	vendor     string
 	rdmaSpec   []*pluginapi.DeviceSpec
 }
 
@@ -37,9 +38,14 @@ func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec) types.PciNetD
 
 	return &pciNetDevice{
 		pciAddress: pciAddr,
+		vendor:     dev.Vendor.ID,
 		ifName:     ifName,
 		rdmaSpec:   rdmaSpec,
 	}
+}
+
+func (nd *pciNetDevice) GetVendor() string {
+	return nd.vendor
 }
 
 func (nd *pciNetDevice) GetIfName() string {

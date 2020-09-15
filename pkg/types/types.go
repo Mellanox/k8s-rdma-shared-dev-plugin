@@ -11,6 +11,7 @@ import (
 
 // Selectors contains common device selectors fields
 type Selectors struct {
+	Vendors []string `json:"vendors,omitempty"`
 	IfNames []string `json:"ifNames,omitempty"`
 }
 
@@ -76,6 +77,7 @@ type RdmaDeviceSpec interface {
 type PciNetDevice interface {
 	GetPciAddr() string
 	GetIfName() string
+	GetVendor() string
 	GetRdmaSpec() []*pluginapi.DeviceSpec
 }
 

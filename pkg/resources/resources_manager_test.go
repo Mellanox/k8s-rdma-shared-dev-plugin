@@ -10,6 +10,7 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 
 	"github.com/jaypipes/ghw"
+	"github.com/jaypipes/pcidb"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -55,7 +56,8 @@ var _ = Describe("ResourcesManger", func() {
            {
              "resourceName": "hca_shared_devices_b",
              "rdmaHcaMax": 500,
-             "selectors": {"ifNames": ["ib2", "ib3"]}
+             "selectors": {"vendors": ["15b3"],
+                           "ifNames": ["ib2", "ib3"]}
            }
         ]}`
 			fs := &utils.FakeFilesystem{
@@ -71,6 +73,7 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(rm.configList)).To(Equal(2))
 			Expect(len(rm.configList[0].Devices)).To(Equal(2))
+			Expect(len(rm.configList[1].Selectors.Vendors)).To(Equal(1))
 			Expect(len(rm.configList[1].Selectors.IfNames)).To(Equal(2))
 		})
 		It("non existing config file", func() {
@@ -120,7 +123,9 @@ var _ = Describe("ResourcesManger", func() {
 			configlist = append(configlist, &types.UserConfig{
 				ResourceName: "test_config",
 				RdmaHcaMax:   100,
-				Selectors:    types.Selectors{IfNames: []string{"eth1"}},
+				Selectors: types.Selectors{
+					Vendors: []string{"15b3"},
+					IfNames: []string{"eth1"}},
 			})
 
 			rm.configList = configlist
@@ -223,8 +228,9 @@ var _ = Describe("ResourcesManger", func() {
 	})
 	Context("GetDevices", func() {
 		It("Get full list of devices", func() {
-			deviceList := []*ghw.PCIDevice{{Address: "0000:02:00.0"},
-				{Address: "0000:03:00.0"}}
+			deviceList := []*ghw.PCIDevice{
+				{Address: "0000:02:00.0", Vendor: &pcidb.Vendor{ID: "15b3"}},
+				{Address: "0000:03:00.0", Vendor: &pcidb.Vendor{ID: "8080"}}}
 			rm := &resourceManager{deviceList: deviceList}
 			Expect(len(rm.GetDevices())).To(Equal(2))
 		})
@@ -235,13 +241,22 @@ var _ = Describe("ResourcesManger", func() {
 			dev2 := &mocks.PciNetDevice{}
 			dev3 := &mocks.PciNetDevice{}
 			dev4 := &mocks.PciNetDevice{}
+			dev1.On("GetVendor").Return("15b3")
 			dev1.On("GetIfName").Return("enp2s0f0")
+
+			dev2.On("GetVendor").Return("8080")
 			dev2.On("GetIfName").Return("enp2s0f1")
+
+			dev3.On("GetVendor").Return("15b3")
 			dev3.On("GetIfName").Return("eth0")
+
+			dev4.On("GetVendor").Return("8080")
 			dev4.On("GetIfName").Return("eth1")
+
 			devices := []types.PciNetDevice{dev1, dev2, dev3, dev4}
 
 			selectors := types.Selectors{
+				Vendors: []string{"15b3", "8080"},
 				IfNames: []string{"enp2s0f0", "enp2s0f1"},
 			}
 			rm := &resourceManager{}

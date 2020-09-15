@@ -4,6 +4,26 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 )
 
+type vendorSelector struct {
+	vendors []string
+}
+
+// NewVendorSelector returns a DeviceSelector interface for vendor list
+func NewVendorSelector(vendors []string) types.DeviceSelector {
+	return &vendorSelector{vendors: vendors}
+}
+
+func (s *vendorSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDevice {
+	filteredList := make([]types.PciNetDevice, 0)
+	for _, dev := range inDevices {
+		devVendor := dev.GetVendor()
+		if contains(s.vendors, devVendor) {
+			filteredList = append(filteredList, dev)
+		}
+	}
+	return filteredList
+}
+
 type ifNameSelector struct {
 	ifNames []string
 }
