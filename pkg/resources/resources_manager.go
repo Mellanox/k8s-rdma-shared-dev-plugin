@@ -249,6 +249,11 @@ func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
 		filteredDevice = NewVendorSelector(selector.Vendors).Filter(filteredDevice)
 	}
 
+	// filter by DeviceIDs list
+	if selector.DeviceIDs != nil && len(selector.DeviceIDs) > 0 {
+		filteredDevice = NewDeviceSelector(selector.DeviceIDs).Filter(filteredDevice)
+	}
+
 	// filter by IfNames list
 	if selector.IfNames != nil && len(selector.IfNames) > 0 {
 		filteredDevice = NewIfNameSelector(selector.IfNames).Filter(filteredDevice)

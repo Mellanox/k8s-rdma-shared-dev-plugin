@@ -24,6 +24,26 @@ func (s *vendorSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDe
 	return filteredList
 }
 
+type deviceIDSelector struct {
+	devices []string
+}
+
+// NewDeviceSelector returns a DeviceSelector interface for device id list
+func NewDeviceSelector(devices []string) types.DeviceSelector {
+	return &deviceIDSelector{devices: devices}
+}
+
+func (s *deviceIDSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDevice {
+	filteredList := make([]types.PciNetDevice, 0)
+	for _, dev := range inDevices {
+		devCode := dev.GetDeviceID()
+		if contains(s.devices, devCode) {
+			filteredList = append(filteredList, dev)
+		}
+	}
+	return filteredList
+}
+
 type ifNameSelector struct {
 	ifNames []string
 }

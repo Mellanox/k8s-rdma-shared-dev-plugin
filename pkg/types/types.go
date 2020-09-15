@@ -11,8 +11,9 @@ import (
 
 // Selectors contains common device selectors fields
 type Selectors struct {
-	Vendors []string `json:"vendors,omitempty"`
-	IfNames []string `json:"ifNames,omitempty"`
+	Vendors   []string `json:"vendors,omitempty"`
+	DeviceIDs []string `json:"deviceIDs,omitempty"`
+	IfNames   []string `json:"ifNames,omitempty"`
 }
 
 // UserConfig configuration for device plugin
@@ -78,6 +79,7 @@ type PciNetDevice interface {
 	GetPciAddr() string
 	GetIfName() string
 	GetVendor() string
+	GetDeviceID() string
 	GetRdmaSpec() []*pluginapi.DeviceSpec
 }
 

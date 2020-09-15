@@ -57,6 +57,7 @@ var _ = Describe("ResourcesManger", func() {
              "resourceName": "hca_shared_devices_b",
              "rdmaHcaMax": 500,
              "selectors": {"vendors": ["15b3"],
+                           "deviceIDs": ["1017"],
                            "ifNames": ["ib2", "ib3"]}
            }
         ]}`
@@ -74,6 +75,7 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(len(rm.configList)).To(Equal(2))
 			Expect(len(rm.configList[0].Devices)).To(Equal(2))
 			Expect(len(rm.configList[1].Selectors.Vendors)).To(Equal(1))
+			Expect(len(rm.configList[1].Selectors.DeviceIDs)).To(Equal(1))
 			Expect(len(rm.configList[1].Selectors.IfNames)).To(Equal(2))
 		})
 		It("non existing config file", func() {
@@ -124,8 +126,9 @@ var _ = Describe("ResourcesManger", func() {
 				ResourceName: "test_config",
 				RdmaHcaMax:   100,
 				Selectors: types.Selectors{
-					Vendors: []string{"15b3"},
-					IfNames: []string{"eth1"}},
+					Vendors:   []string{"15b3"},
+					DeviceIDs: []string{"1017"},
+					IfNames:   []string{"eth1"}},
 			})
 
 			rm.configList = configlist
@@ -229,8 +232,8 @@ var _ = Describe("ResourcesManger", func() {
 	Context("GetDevices", func() {
 		It("Get full list of devices", func() {
 			deviceList := []*ghw.PCIDevice{
-				{Address: "0000:02:00.0", Vendor: &pcidb.Vendor{ID: "15b3"}},
-				{Address: "0000:03:00.0", Vendor: &pcidb.Vendor{ID: "8080"}}}
+				{Address: "0000:02:00.0", Vendor: &pcidb.Vendor{ID: "15b3"}, Product: &pcidb.Product{ID: "1017"}},
+				{Address: "0000:03:00.0", Vendor: &pcidb.Vendor{ID: "8080"}, Product: &pcidb.Product{ID: "1234"}}}
 			rm := &resourceManager{deviceList: deviceList}
 			Expect(len(rm.GetDevices())).To(Equal(2))
 		})
@@ -242,22 +245,27 @@ var _ = Describe("ResourcesManger", func() {
 			dev3 := &mocks.PciNetDevice{}
 			dev4 := &mocks.PciNetDevice{}
 			dev1.On("GetVendor").Return("15b3")
+			dev1.On("GetDeviceID").Return("1017")
 			dev1.On("GetIfName").Return("enp2s0f0")
 
 			dev2.On("GetVendor").Return("8080")
+			dev2.On("GetDeviceID").Return("2031")
 			dev2.On("GetIfName").Return("enp2s0f1")
 
 			dev3.On("GetVendor").Return("15b3")
+			dev3.On("GetDeviceID").Return("1017")
 			dev3.On("GetIfName").Return("eth0")
 
 			dev4.On("GetVendor").Return("8080")
+			dev4.On("GetDeviceID").Return("1234")
 			dev4.On("GetIfName").Return("eth1")
 
 			devices := []types.PciNetDevice{dev1, dev2, dev3, dev4}
 
 			selectors := types.Selectors{
-				Vendors: []string{"15b3", "8080"},
-				IfNames: []string{"enp2s0f0", "enp2s0f1"},
+				Vendors:   []string{"15b3", "8080"},
+				DeviceIDs: []string{"1017", "2031"},
+				IfNames:   []string{"enp2s0f0", "enp2s0f1"},
 			}
 			rm := &resourceManager{}
 			filteredDevices := rm.GetFilteredDevices(devices, selectors)

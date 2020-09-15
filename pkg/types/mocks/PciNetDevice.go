@@ -11,6 +11,20 @@ type PciNetDevice struct {
 	mock.Mock
 }
 
+// GetDeviceID provides a mock function with given fields:
+func (_m *PciNetDevice) GetDeviceID() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // GetIfName provides a mock function with given fields:
 func (_m *PciNetDevice) GetIfName() string {
 	ret := _m.Called()
