@@ -13,6 +13,7 @@ import (
 type Selectors struct {
 	Vendors   []string `json:"vendors,omitempty"`
 	DeviceIDs []string `json:"deviceIDs,omitempty"`
+	Drivers   []string `json:"drivers,omitempty"`
 	IfNames   []string `json:"ifNames,omitempty"`
 }
 
@@ -48,7 +49,7 @@ type ResourceManager interface {
 	StartAllServers() error
 	StopAllServers() error
 	RestartAllServers() error
-	GetFilteredDevices(devices []PciNetDevice, selector Selectors) []PciNetDevice
+	GetFilteredDevices(devices []PciNetDevice, selector *Selectors) []PciNetDevice
 }
 
 // ResourceServerPort to connect the resources server to k8s
@@ -80,6 +81,7 @@ type PciNetDevice interface {
 	GetIfName() string
 	GetVendor() string
 	GetDeviceID() string
+	GetDriver() string
 	GetRdmaSpec() []*pluginapi.DeviceSpec
 }
 

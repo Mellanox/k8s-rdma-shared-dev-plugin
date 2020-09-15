@@ -15,7 +15,7 @@ import (
 
 var (
 	sysNetDevices = "/sys/class/net"
-	sysBusPci     = "/sys/bus/pci/devices"
+	SysBusPci     = "/sys/bus/pci/devices"
 )
 
 // GetPciAddress return the pci address for given interface name
@@ -53,11 +53,12 @@ func GetRdmaDevices(pciAddress string) []string {
 }
 
 // IsEmptySelector returns if the selector is empty
-func IsEmptySelector(selector types.Selectors) bool {
-	values := reflect.ValueOf(selector)
+func IsEmptySelector(selector *types.Selectors) bool {
+	values := reflect.ValueOf(*selector)
 
 	for i := 0; i < values.NumField(); i++ {
-		if values.Field(i).Len() > 0 {
+		value := values.Field(i)
+		if !value.IsNil() && value.Len() > 0 {
 			return false
 		}
 	}
@@ -66,7 +67,7 @@ func IsEmptySelector(selector types.Selectors) bool {
 
 // GetNetNames returns host net interface names as string for a PCI device from its pci address
 func GetNetNames(pciAddr string) ([]string, error) {
-	netDir := filepath.Join(sysBusPci, pciAddr, "net")
+	netDir := filepath.Join(SysBusPci, pciAddr, "net")
 	if _, err := os.Lstat(netDir); err != nil {
 		return nil, fmt.Errorf("no net directory under pci device %s: %q", pciAddr, err)
 	}
@@ -84,23 +85,12 @@ func GetNetNames(pciAddr string) ([]string, error) {
 	return names, nil
 }
 
-// contains check if a list contains a specific value
-func contains(list []string, value string) bool {
-	for _, s := range list {
-		if s == value {
-			return true
-		}
+// GetPCIDevDriver returns current driver attached to a pci device from its pci address
+func GetPCIDevDriver(pciAddr string) (string, error) {
+	driverLink := filepath.Join(SysBusPci, pciAddr, "driver")
+	driverInfo, err := os.Readlink(driverLink)
+	if err != nil {
+		return "", fmt.Errorf("error getting driver info for device %s %v", pciAddr, err)
 	}
-	return false
-}
-
-// FilterNetDevs filters the devices the are incoming and exists in the allowed devices
-func FilterNetDevs(inDevices []types.PciNetDevice, allowed []string) []types.PciNetDevice {
-	filteredList := make([]types.PciNetDevice, 0)
-	for _, dev := range inDevices {
-		if contains(allowed, dev.GetIfName()) {
-			filteredList = append(filteredList, dev)
-		}
-	}
-	return filteredList
+	return filepath.Base(driverInfo), nil
 }

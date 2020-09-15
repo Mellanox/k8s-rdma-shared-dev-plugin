@@ -231,6 +231,22 @@ var _ = Describe("ResourcesManger", func() {
 	})
 	Context("GetDevices", func() {
 		It("Get full list of devices", func() {
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{
+					"sys/bus/pci/devices/0000:02:00.0/net/enp2s0f0",
+					"sys/bus/pci/devices/0000:03:00.0/net/enp3s0f0",
+				},
+				Symlinks: map[string]string{
+					"sys/bus/pci/devices/0000:02:00.0/driver": "../../../../bus/pci/drivers/mlx5_core",
+					"sys/bus/pci/devices/0000:03:00.0/driver": "../../../../bus/pci/drivers/igb",
+				},
+			}
+			defer fs.Use()()
+			sysBusPciPath := utils.SysBusPci
+			utils.SysBusPci = path.Join(fs.RootDir, utils.SysBusPci)
+			defer func() {
+				utils.SysBusPci = sysBusPciPath
+			}()
 			deviceList := []*ghw.PCIDevice{
 				{Address: "0000:02:00.0", Vendor: &pcidb.Vendor{ID: "15b3"}, Product: &pcidb.Product{ID: "1017"}},
 				{Address: "0000:03:00.0", Vendor: &pcidb.Vendor{ID: "8080"}, Product: &pcidb.Product{ID: "1234"}}}
@@ -246,25 +262,30 @@ var _ = Describe("ResourcesManger", func() {
 			dev4 := &mocks.PciNetDevice{}
 			dev1.On("GetVendor").Return("15b3")
 			dev1.On("GetDeviceID").Return("1017")
+			dev1.On("GetDriver").Return("mlx5_core")
 			dev1.On("GetIfName").Return("enp2s0f0")
 
 			dev2.On("GetVendor").Return("8080")
 			dev2.On("GetDeviceID").Return("2031")
+			dev2.On("GetDriver").Return("igb")
 			dev2.On("GetIfName").Return("enp2s0f1")
 
 			dev3.On("GetVendor").Return("15b3")
 			dev3.On("GetDeviceID").Return("1017")
+			dev3.On("GetDriver").Return("broadcom")
 			dev3.On("GetIfName").Return("eth0")
 
 			dev4.On("GetVendor").Return("8080")
 			dev4.On("GetDeviceID").Return("1234")
+			dev4.On("GetDriver").Return("igb")
 			dev4.On("GetIfName").Return("eth1")
 
 			devices := []types.PciNetDevice{dev1, dev2, dev3, dev4}
 
-			selectors := types.Selectors{
+			selectors := &types.Selectors{
 				Vendors:   []string{"15b3", "8080"},
 				DeviceIDs: []string{"1017", "2031"},
+				Drivers:   []string{"mlx5_core", "igb"},
 				IfNames:   []string{"enp2s0f0", "enp2s0f1"},
 			}
 			rm := &resourceManager{}

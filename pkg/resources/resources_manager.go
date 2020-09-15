@@ -102,7 +102,7 @@ func (rm *resourceManager) ValidateConfigs() error {
 			return fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", conf.RdmaHcaMax)
 		}
 
-		isEmptySelector := utils.IsEmptySelector(conf.Selectors)
+		isEmptySelector := utils.IsEmptySelector(&(conf.Selectors))
 		if isEmptySelector && len(conf.Devices) == 0 {
 			return fmt.Errorf("error: configuration missmatch. neither \"selectors\" nor \"devices\" fields exits," +
 				" it is recommended to use the new “selectors” field")
@@ -127,7 +127,7 @@ func (rm *resourceManager) InitServers() error {
 	for _, config := range rm.configList {
 		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
-		filteredDevices := rm.GetFilteredDevices(devices, config.Selectors)
+		filteredDevices := rm.GetFilteredDevices(devices, &config.Selectors)
 
 		if len(filteredDevices) == 0 {
 			log.Printf("Warning: no devices in device pool, creating empty resource server for %s", config.ResourceName)
@@ -234,14 +234,17 @@ func (rm *resourceManager) GetDevices() []types.PciNetDevice {
 	newPciDevices := make([]types.PciNetDevice, 0)
 	rds := &rdmaDeviceSpec{}
 	for _, device := range rm.deviceList {
-		newDevice := NewPciNetDevice(device, rds)
-		newPciDevices = append(newPciDevices, newDevice)
+		if newDevice, err := NewPciNetDevice(device, rds); err == nil {
+			newPciDevices = append(newPciDevices, newDevice)
+		} else {
+			log.Printf("error creating new device: %q", err)
+		}
 	}
 	return newPciDevices
 }
 
 func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
-	selector types.Selectors) []types.PciNetDevice {
+	selector *types.Selectors) []types.PciNetDevice {
 	filteredDevice := devices
 
 	// filter by Vendors list
@@ -252,6 +255,11 @@ func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
 	// filter by DeviceIDs list
 	if selector.DeviceIDs != nil && len(selector.DeviceIDs) > 0 {
 		filteredDevice = NewDeviceSelector(selector.DeviceIDs).Filter(filteredDevice)
+	}
+
+	// filter by Driver list
+	if selector.Drivers != nil && len(selector.Drivers) > 0 {
+		filteredDevice = NewDriverSelector(selector.Drivers).Filter(filteredDevice)
 	}
 
 	// filter by IfNames list

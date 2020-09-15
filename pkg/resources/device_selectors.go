@@ -63,6 +63,26 @@ func (s *ifNameSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDe
 	return filteredList
 }
 
+type driverSelector struct {
+	drivers []string
+}
+
+// NewDriverSelector returns a DeviceSelector interface for driver list
+func NewDriverSelector(drivers []string) types.DeviceSelector {
+	return &driverSelector{drivers: drivers}
+}
+
+func (s *driverSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDevice {
+	filteredList := make([]types.PciNetDevice, 0)
+	for _, dev := range inDevices {
+		devDriver := dev.GetDriver()
+		if contains(s.drivers, devDriver) {
+			filteredList = append(filteredList, dev)
+		}
+	}
+	return filteredList
+}
+
 func contains(list []string, needle string) bool {
 	for _, s := range list {
 		if s == needle {

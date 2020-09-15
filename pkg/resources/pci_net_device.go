@@ -16,11 +16,12 @@ type pciNetDevice struct {
 	ifName     string
 	vendor     string
 	deviceID   string
+	driver     string
 	rdmaSpec   []*pluginapi.DeviceSpec
 }
 
 // NewPciNetDevice returns an instance of PciNetDevice interface
-func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec) types.PciNetDevice {
+func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec) (types.PciNetDevice, error) {
 	var ifName string
 
 	pciAddr := dev.Address
@@ -35,15 +36,21 @@ func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec) types.PciNetD
 		}
 	}
 
+	driver, err := utils.GetPCIDevDriver(pciAddr)
+	if err != nil {
+		return nil, err
+	}
+
 	rdmaSpec := rds.Get(pciAddr)
 
 	return &pciNetDevice{
 		pciAddress: pciAddr,
 		vendor:     dev.Vendor.ID,
 		deviceID:   dev.Product.ID,
+		driver:     driver,
 		ifName:     ifName,
 		rdmaSpec:   rdmaSpec,
-	}
+	}, nil
 }
 
 func (nd *pciNetDevice) GetVendor() string {
@@ -52,6 +59,10 @@ func (nd *pciNetDevice) GetVendor() string {
 
 func (nd *pciNetDevice) GetDeviceID() string {
 	return nd.deviceID
+}
+
+func (nd *pciNetDevice) GetDriver() string {
+	return nd.driver
 }
 
 func (nd *pciNetDevice) GetIfName() string {
