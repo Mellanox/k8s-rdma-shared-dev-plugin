@@ -53,6 +53,20 @@ func (_m *PciNetDevice) GetIfName() string {
 	return r0
 }
 
+// GetLinkType provides a mock function with given fields:
+func (_m *PciNetDevice) GetLinkType() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // GetPciAddr provides a mock function with given fields:
 func (_m *PciNetDevice) GetPciAddr() string {
 	ret := _m.Called()

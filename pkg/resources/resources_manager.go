@@ -41,6 +41,7 @@ type resourceManager struct {
 	configList      []*types.UserConfig
 	resourceServers []types.ResourceServer
 	deviceList      []*ghw.PCIDevice
+	netlinkManager  types.NetlinkManager
 }
 
 func NewResourceManager() types.ResourceManager {
@@ -55,6 +56,7 @@ func NewResourceManager() types.ResourceManager {
 		resourcePrefix: rdmaHcaResourcePrefix,
 		socketSuffix:   socketSuffix,
 		watchMode:      watcherMode,
+		netlinkManager: &netlinkManager{},
 	}
 }
 
@@ -234,7 +236,7 @@ func (rm *resourceManager) GetDevices() []types.PciNetDevice {
 	newPciDevices := make([]types.PciNetDevice, 0)
 	rds := &rdmaDeviceSpec{}
 	for _, device := range rm.deviceList {
-		if newDevice, err := NewPciNetDevice(device, rds); err == nil {
+		if newDevice, err := NewPciNetDevice(device, rds, rm.netlinkManager); err == nil {
 			newPciDevices = append(newPciDevices, newDevice)
 		} else {
 			log.Printf("error creating new device: %q", err)
@@ -265,6 +267,11 @@ func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
 	// filter by IfNames list
 	if selector.IfNames != nil && len(selector.IfNames) > 0 {
 		filteredDevice = NewIfNameSelector(selector.IfNames).Filter(filteredDevice)
+	}
+
+	// filter by LinkType list
+	if selector.LinkTypes != nil && len(selector.LinkTypes) > 0 {
+		filteredDevice = NewLinkTypeSelector(selector.LinkTypes).Filter(filteredDevice)
 	}
 
 	newDeviceList := make([]types.PciNetDevice, len(filteredDevice))

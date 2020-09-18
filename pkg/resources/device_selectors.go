@@ -83,6 +83,26 @@ func (s *driverSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDe
 	return filteredList
 }
 
+type linkTypeSelector struct {
+	linkTypes []string
+}
+
+// NewLinkTypeSelector returns a interface for netDev list
+func NewLinkTypeSelector(linkTypes []string) types.DeviceSelector {
+	return &linkTypeSelector{linkTypes: linkTypes}
+}
+
+func (s *linkTypeSelector) Filter(inDevices []types.PciNetDevice) []types.PciNetDevice {
+	filteredList := make([]types.PciNetDevice, 0)
+	for _, dev := range inDevices {
+		linkType := dev.GetLinkType()
+		if contains(s.linkTypes, linkType) {
+			filteredList = append(filteredList, dev)
+		}
+	}
+	return filteredList
+}
+
 func contains(list []string, needle string) bool {
 	for _, s := range list {
 		if s == needle {

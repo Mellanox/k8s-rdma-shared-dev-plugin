@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
@@ -15,6 +16,7 @@ type Selectors struct {
 	DeviceIDs []string `json:"deviceIDs,omitempty"`
 	Drivers   []string `json:"drivers,omitempty"`
 	IfNames   []string `json:"ifNames,omitempty"`
+	LinkTypes []string `json:"linkTypes,omitempty"`
 }
 
 // UserConfig configuration for device plugin
@@ -82,10 +84,16 @@ type PciNetDevice interface {
 	GetVendor() string
 	GetDeviceID() string
 	GetDriver() string
+	GetLinkType() string
 	GetRdmaSpec() []*pluginapi.DeviceSpec
 }
 
 // DeviceSelector provides an interface for filtering a list of devices
 type DeviceSelector interface {
 	Filter([]PciNetDevice) []PciNetDevice
+}
+
+// NetlinkManager is an interface to mock nelink library
+type NetlinkManager interface {
+	LinkByName(string) (netlink.Link, error)
 }
