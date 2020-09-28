@@ -5,15 +5,26 @@ import (
 	"os"
 	"time"
 
+	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
+// Selectors contains common device selectors fields
+type Selectors struct {
+	Vendors   []string `json:"vendors,omitempty"`
+	DeviceIDs []string `json:"deviceIDs,omitempty"`
+	Drivers   []string `json:"drivers,omitempty"`
+	IfNames   []string `json:"ifNames,omitempty"`
+	LinkTypes []string `json:"linkTypes,omitempty"`
+}
+
 // UserConfig configuration for device plugin
 type UserConfig struct {
-	ResourceName string   `json:"resourceName"`
-	RdmaHcaMax   int      `json:"rdmaHcaMax"`
-	Devices      []string `json:"devices"`
+	ResourceName string    `json:"resourceName"`
+	RdmaHcaMax   int       `json:"rdmaHcaMax"`
+	Devices      []string  `json:"devices"`
+	Selectors    Selectors `json:"selectors"`
 }
 
 // UserConfigList config list for servers
@@ -34,10 +45,13 @@ type ResourceServer interface {
 type ResourceManager interface {
 	ReadConfig() error
 	ValidateConfigs() error
+	DiscoverHostDevices() error
+	GetDevices() []PciNetDevice
 	InitServers() error
 	StartAllServers() error
 	StopAllServers() error
 	RestartAllServers() error
+	GetFilteredDevices(devices []PciNetDevice, selector *Selectors) []PciNetDevice
 }
 
 // ResourceServerPort to connect the resources server to k8s
@@ -61,4 +75,25 @@ type SignalNotifier interface {
 // RdmaDeviceSpec used to find the rdma devices
 type RdmaDeviceSpec interface {
 	Get(string) []*pluginapi.DeviceSpec
+}
+
+// PciNetDevice provides an interface to get generic device specific information
+type PciNetDevice interface {
+	GetPciAddr() string
+	GetIfName() string
+	GetVendor() string
+	GetDeviceID() string
+	GetDriver() string
+	GetLinkType() string
+	GetRdmaSpec() []*pluginapi.DeviceSpec
+}
+
+// DeviceSelector provides an interface for filtering a list of devices
+type DeviceSelector interface {
+	Filter([]PciNetDevice) []PciNetDevice
+}
+
+// NetlinkManager is an interface to mock nelink library
+type NetlinkManager interface {
+	LinkByName(string) (netlink.Link, error)
 }

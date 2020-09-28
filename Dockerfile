@@ -11,6 +11,7 @@ RUN apk add --update --virtual build-dependencies build-base linux-headers git &
     make build
 
 FROM alpine
+RUN apk add hwdata-pci
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"

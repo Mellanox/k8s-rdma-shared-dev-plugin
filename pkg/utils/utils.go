@@ -2,14 +2,20 @@ package utils
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
+	"reflect"
 
 	"github.com/Mellanox/rdmamap"
+
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 )
 
 var (
 	sysNetDevices = "/sys/class/net"
+	SysBusPci     = "/sys/bus/pci/devices"
 )
 
 // GetPciAddress return the pci address for given interface name
@@ -44,4 +50,47 @@ func GetRdmaDevices(pciAddress string) []string {
 	}
 
 	return rdmaDevices
+}
+
+// IsEmptySelector returns if the selector is empty
+func IsEmptySelector(selector *types.Selectors) bool {
+	values := reflect.ValueOf(*selector)
+
+	for i := 0; i < values.NumField(); i++ {
+		value := values.Field(i)
+		if !value.IsNil() && value.Len() > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// GetNetNames returns host net interface names as string for a PCI device from its pci address
+func GetNetNames(pciAddr string) ([]string, error) {
+	netDir := filepath.Join(SysBusPci, pciAddr, "net")
+	if _, err := os.Lstat(netDir); err != nil {
+		return nil, fmt.Errorf("no net directory under pci device %s: %q", pciAddr, err)
+	}
+
+	fInfos, err := ioutil.ReadDir(netDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read net directory %s: %q", netDir, err)
+	}
+
+	names := make([]string, 0)
+	for _, f := range fInfos {
+		names = append(names, f.Name())
+	}
+
+	return names, nil
+}
+
+// GetPCIDevDriver returns current driver attached to a pci device from its pci address
+func GetPCIDevDriver(pciAddr string) (string, error) {
+	driverLink := filepath.Join(SysBusPci, pciAddr, "driver")
+	driverInfo, err := os.Readlink(driverLink)
+	if err != nil {
+		return "", fmt.Errorf("error getting driver info for device %s %v", pciAddr, err)
+	}
+	return filepath.Base(driverInfo), nil
 }

@@ -42,7 +42,7 @@ kubectl create -f example/test-hca-pod.yaml
 
 The device plugin can be used with macvlan for RDMA, to do the following steps:
 
-**2.** use macvlan cni
+**1.** use macvlan cni
 
 ```
 # cat > /etc/cni/net.d/00-macvlan.conf <<EOF
@@ -73,6 +73,58 @@ EOF
 ```
 kubectl create -f <rdma-app.yaml>
 ```
+
+# RDMA Shared Device Plugin Configurations
+The plugin has several configuration fields, this section explains each field usage
+
+```json
+{
+  "configList": [{
+    "resourceName": "hca_shared_devices_a",
+    "rdmaHcaMax": 1000,
+    "devices": ["ib0", "ib1"]
+  },
+    {
+      "resourceName": "hca_shared_devices_b",
+      "rdmaHcaMax": 500,
+      "selectors": {
+        "vendors": ["15b3"],
+        "deviceIDs": ["1017"],
+        "ifNames": ["ib3", "ib4"]
+      }
+    }
+  ]
+}
+```
+
+`"configList"` should contain a list of config objects. Each config object may consist of following fields:
+
+
+|     Field      | Required |                                                    Description                                                                     |     Type         |                         Example                         |
+|----------------|----------|------------------------------------------------------------------------------------------------------------------------------------|------------------|---------------------------------------------------------|
+| "resourceName" | Y        | Endpoint resource name. Should not contain special characters, must be unique in the scope of the resource prefix                  | string           | "hca_shared_devices_a"                                  |
+| "rdmaHcaMax"   | Y        | Maximum number of RDMA resources that can be provided by the device plugin resource                                                | Integer          | 1000                                                    |
+| "selectors"    | N        | A map of device selectors for filtering the devices. refer to [Device Selectors](#devices-selectors) section for more information  | json object      | selectors": {"vendors": ["15b3"],"deviceIDs": ["1017"]} |
+| "devices"      | N        | A list of devices names to be selected, same as "ifNames" selector                                                                 | `string` list    | ["ib0", "ib1"]                                          |
+
+Note: Either `selectors` or `devices` must be specified for a given resource, "selectors" is recommended.
+
+## Devices Selectors
+The following selectors are used for filtering the desired devices.
+
+
+|    Field    |                          Description                           |     Type      |         Example          |
+|-------------|----------------------------------------------------------------|---------------|--------------------------|
+| "vendors"   | Target device's vendor Hex code as string                      | `string` list | "vendors": ["15b3"]      |
+| "deviceIDs" | Target device's device Hex code as string                      | `string` list | "devices": ["1017"]      |
+| "drivers"   | Target device driver names as string                           | `string` list | "drivers": ["mlx5_core"] |
+| "ifNames"   | Target device name                                             | `string` list | "ifNames": ["enp2s2f0"]  |
+| "linkTypes" | The link type of the net device associated with the PCI device | `string` list | "linkTypes": ["ether"]   |
+
+[//]: # (The tables above generated using: https://ozh.github.io/ascii-tables/)
+
+## Selectors Matching Process
+The device plugin filters the host devices based on the provided selectors, if there are any missing selectors, the device plugin ignores them. Device plugin performs logical OR between elements of a specific selector and logical AND is performed between selectors.
 
 # RDMA shared device plugin deployment with node labels
 

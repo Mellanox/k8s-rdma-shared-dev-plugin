@@ -14,7 +14,11 @@ data:
            {
              "resourceName": "hca_shared_devices_b",
              "rdmaHcaMax": 500,
-             "devices": ["ib3", "ib4"]
+             "selectors": {
+               "vendors": ["15b3"],
+               "deviceIDs": ["1017"],
+               "ifNames": ["ib3", "ib4"]
+             }
            }
         ]
     }
