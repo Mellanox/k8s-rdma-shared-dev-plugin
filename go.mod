@@ -6,6 +6,7 @@ require (
 	github.com/Mellanox/rdmamap v1.0.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/gogo/protobuf v1.3.1 // indirect
+	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b
 	github.com/jaypipes/ghw v0.6.1
 	github.com/jaypipes/pcidb v0.5.0
 	github.com/onsi/ginkgo v1.11.0

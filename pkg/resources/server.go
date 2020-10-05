@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/fsnotify/fsnotify"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
@@ -20,7 +19,8 @@ import (
 
 const (
 	// Local use
-	cDialTimeout = 5 * time.Second
+	cDialTimeout  = 5 * time.Second
+	watchWaitTime = 5 * time.Second
 )
 
 type resourcesServerPort struct {
@@ -28,17 +28,16 @@ type resourcesServerPort struct {
 }
 
 type resourceServer struct {
-	resourceName  string
-	watchMode     bool
-	socketName    string
-	socketPath    string
-	devs          []*pluginapi.Device
-	deviceSpec    []*pluginapi.DeviceSpec
-	stop          chan interface{}
-	stopWatcher   chan bool
-	health        chan *pluginapi.Device
-	socketWatcher *fsnotify.Watcher
-	rsConnector   types.ResourceServerPort
+	resourceName string
+	watchMode    bool
+	socketName   string
+	socketPath   string
+	devs         []*pluginapi.Device
+	deviceSpec   []*pluginapi.DeviceSpec
+	stop         chan interface{}
+	stopWatcher  chan bool
+	health       chan *pluginapi.Device
+	rsConnector  types.ResourceServerPort
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -162,35 +161,34 @@ func detectPluginWatchMode(sockDir string) bool {
 }
 
 // Start starts the gRPC server of the device plugin
-func (m *resourceServer) Start() error {
-	err := m.cleanup()
+func (rs *resourceServer) Start() error {
+	_ = rs.cleanup()
+	log.Printf("starting %s device plugin endpoint at: %s\n", rs.resourceName, rs.socketName)
+	rs.rsConnector.CreateServer()
+	sock, err := rs.rsConnector.Listen("unix", rs.socketPath)
 	if err != nil {
 		return err
 	}
 
-	m.rsConnector.CreateServer()
-	sock, err := m.rsConnector.Listen("unix", m.socketPath)
-	if err != nil {
-		return err
+	if rs.watchMode {
+		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
 	}
+	pluginapi.RegisterDevicePluginServer(rs.rsConnector.GetServer(), rs)
 
-	if m.watchMode {
-		registerapi.RegisterRegistrationServer(m.rsConnector.GetServer(), m)
-	}
-	pluginapi.RegisterDevicePluginServer(m.rsConnector.GetServer(), m)
-
-	m.rsConnector.Serve(sock)
+	rs.rsConnector.Serve(sock)
 
 	// Wait for server to start by launching a blocking connection
-	conn, err := m.rsConnector.Dial(m.socketPath, cDialTimeout)
+	conn, err := rs.rsConnector.Dial(rs.socketPath, cDialTimeout)
 	if err != nil {
 		return err
 	}
-	m.rsConnector.Close(conn)
+	rs.rsConnector.Close(conn)
 
-	if !m.watchMode {
-		if err = m.register(); err != nil {
-			m.rsConnector.Stop()
+	log.Printf("%s device plugin endpoint started serving", rs.resourceName)
+
+	if !rs.watchMode {
+		if err = rs.register(); err != nil {
+			rs.rsConnector.Stop()
 			return err
 		}
 	}
@@ -199,98 +197,104 @@ func (m *resourceServer) Start() error {
 }
 
 // Stop stops the gRPC server
-func (m *resourceServer) Stop() error {
-	if m.rsConnector == nil || m.rsConnector.GetServer() == nil {
+func (rs *resourceServer) Stop() error {
+	log.Printf("stopping %s device plugin server...", rs.resourceName)
+	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return nil
 	}
 
-	m.rsConnector.Stop()
-	m.rsConnector.DeleteServer()
-	if !m.watchMode {
-		m.stopWatcher <- true
+	// Send terminate signal to ListAndWatch()
+	rs.stop <- true
+	if !rs.watchMode {
+		rs.stopWatcher <- true
 	}
-	close(m.stop)
 
-	return m.cleanup()
+	rs.rsConnector.Stop()
+	rs.rsConnector.DeleteServer()
+
+	return rs.cleanup()
 }
 
 // Restart restart plugin server
-func (m *resourceServer) Restart() error {
-	if err := m.Stop(); err != nil {
-		return err
+func (rs *resourceServer) Restart() error {
+	log.Printf("restarting %s device plugin server...", rs.resourceName)
+	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
+		return fmt.Errorf("grpc server instance not found for %s", rs.resourceName)
 	}
-	return m.Start()
+
+	rs.rsConnector.Stop()
+	rs.rsConnector.DeleteServer()
+
+	// Send terminate signal to ListAndWatch()
+	rs.stop <- true
+
+	return rs.Start()
 }
 
-// Watch watch for changes in old socket if used
-func (m *resourceServer) Watch() error {
-	log.Println("Starting FS watcher.")
-	watcher, err := newFSWatcher(deprecatedSockDir)
-	if err != nil {
-		log.Fatal("Failed to created FS watcher.")
-	}
-	m.socketWatcher = watcher
-	defer watcher.Close()
-
-	select {
-	case event := <-watcher.Events:
-		if event.Name == m.socketPath && event.Op&fsnotify.Create == fsnotify.Create {
-			log.Printf("inotify: %s created, restarting.", m.socketPath)
-			if err = m.Restart(); err != nil {
-				return fmt.Errorf("unable to restart server %v", err)
+// Watch for Kubelet socket file; if not present restart server
+func (rs *resourceServer) Watch() {
+	// Watch for Kubelet socket file; if not present restart server
+	for {
+		select {
+		case stop := <-rs.stopWatcher:
+			if stop {
+				log.Printf("kubelet watcher stopped for server %s", rs.socketPath)
+				return
+			}
+		default:
+			_, err := os.Lstat(rs.socketPath)
+			if err != nil {
+				// Socket file not found; restart server
+				log.Printf("warning: server endpoint not found %s", rs.socketName)
+				log.Printf("warning: most likely Kubelet restarted")
+				if err := rs.Restart(); err != nil {
+					log.Printf("error: unable to restart server %v", err)
+				}
 			}
 		}
-
-	case err := <-watcher.Errors:
-		return fmt.Errorf("inotify: %s", err)
-
-	case stop := <-m.stopWatcher:
-		if stop {
-			log.Println("kubelet watcher stopped")
-			_ = watcher.Close()
-		}
+		// Sleep for some intervals; TODO: investigate on suggested interval
+		time.Sleep(watchWaitTime)
 	}
-	return nil
 }
 
 // Register registers the device plugin for the given resourceName with Kubelet.
-func (m *resourceServer) register() error {
+func (rs *resourceServer) register() error {
 	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
-	conn, err := m.rsConnector.Dial(kubeletEndpoint, cDialTimeout)
+	conn, err := rs.rsConnector.Dial(kubeletEndpoint, cDialTimeout)
 	if err != nil {
 		return err
 	}
-	defer m.rsConnector.Close(conn)
+	defer rs.rsConnector.Close(conn)
 
 	client := pluginapi.NewRegistrationClient(conn)
 	reqt := &pluginapi.RegisterRequest{
 		Version:      pluginapi.Version,
-		Endpoint:     m.socketName,
-		ResourceName: m.resourceName,
+		Endpoint:     rs.socketName,
+		ResourceName: rs.resourceName,
 	}
 
-	return m.rsConnector.Register(client, reqt)
+	return rs.rsConnector.Register(client, reqt)
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (m *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	log.Println("exposing devices: ", m.devs)
-	_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	log.Println("exposing devices: ", rs.devs)
+	_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
 
 	for {
 		select {
-		case <-m.stop:
+		case <-rs.stop:
 			return nil
-		case d := <-m.health:
+		case d := <-rs.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
 			d.Health = pluginapi.Unhealthy
-			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: m.devs})
+			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
 		}
 	}
 }
 
 // Allocate which return list of devices.
-func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (
+func (rs *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (
 	*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
@@ -298,7 +302,7 @@ func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequ
 
 	for i := range r.GetContainerRequests() {
 		ress[i] = &pluginapi.ContainerAllocateResponse{
-			Devices: m.deviceSpec,
+			Devices: rs.deviceSpec,
 		}
 	}
 
@@ -311,7 +315,7 @@ func (m *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequ
 }
 
 // GetDevicePluginOptions returns options to be communicated with Device Manager
-func (m *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (
+func (rs *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empty) (
 	*pluginapi.DevicePluginOptions, error) {
 	return &pluginapi.DevicePluginOptions{
 		PreStartRequired: false,
@@ -319,13 +323,13 @@ func (m *resourceServer) GetDevicePluginOptions(context.Context, *pluginapi.Empt
 }
 
 // PreStartContainer is called, if indicated by Device Plugin during registeration phase
-func (m *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (
+func (rs *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStartContainerRequest) (
 	*pluginapi.PreStartContainerResponse, error) {
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-func (m *resourceServer) cleanup() error {
-	if err := os.Remove(m.socketPath); err != nil && !os.IsNotExist(err) {
+func (rs *resourceServer) cleanup() error {
+	if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -333,24 +337,24 @@ func (m *resourceServer) cleanup() error {
 }
 
 // GetInfo get info of plugin
-func (m *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
+func (rs *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
-		Name:              m.resourceName,
-		Endpoint:          filepath.Join(activeSockDir, m.socketName),
+		Name:              rs.resourceName,
+		Endpoint:          filepath.Join(activeSockDir, rs.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
 }
 
 // NotifyRegistrationStatus notify for registration status
-func (m *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (
+func (rs *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (
 	*registerapi.RegistrationStatusResponse, error) {
 	if regstat.PluginRegistered {
-		log.Printf("%s gets registered successfully at Kubelet \n", m.socketName)
+		log.Printf("%s gets registered successfully at Kubelet \n", rs.socketName)
 	} else {
-		log.Printf("%s failed to be registered at Kubelet: %v; restarting.\n", m.socketName, regstat.Error)
-		m.rsConnector.Stop()
+		log.Printf("%s failed to be registered at Kubelet: %v; restarting.\n", rs.socketName, regstat.Error)
+		rs.rsConnector.Stop()
 	}
 	return &registerapi.RegistrationStatusResponse{}, nil
 }

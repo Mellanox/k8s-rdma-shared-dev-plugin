@@ -153,11 +153,7 @@ func (rm *resourceManager) StartAllServers() error {
 
 		// start watcher
 		if !rm.watchMode {
-			go func() {
-				if err := rs.Watch(); err != nil {
-					log.Fatalf("Failed watching socket %v", err)
-				}
-			}()
+			go rs.Watch()
 		}
 	}
 	return nil
