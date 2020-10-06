@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
@@ -313,15 +315,9 @@ var _ = Describe("resourceServer tests", func() {
 	Context("Watch", func() {
 		fakeSocketName := "fake.socket"
 		var fakeSocketPath string
-		var deprecatedSockDirBackup string
 		var fs utils.FakeFilesystem
+		deprecatedSockDirBackup := deprecatedSockDir
 		var cleanTemp func()
-		BeforeSuite(func() {
-			deprecatedSockDirBackup = deprecatedSockDir
-		})
-		AfterSuite(func() {
-			deprecatedSockDir = deprecatedSockDirBackup
-		})
 		BeforeEach(func() {
 			fs = utils.FakeFilesystem{
 				Files: map[string][]byte{fakeSocketName: []byte("")},
@@ -332,6 +328,7 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		AfterEach(func() {
 			cleanTemp()
+			deprecatedSockDir = deprecatedSockDirBackup
 		})
 		It("Watch socket then stop watcher", func() {
 			rs := resourceServer{
@@ -443,4 +440,213 @@ var _ = Describe("resourceServer tests", func() {
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
+	DescribeTable("registering with Kubelet",
+		func(shouldRunServer, shouldEnablePluginWatch, shouldServerFail, shouldFail bool) {
+			fs := &utils.FakeFilesystem{}
+			defer fs.Use()()
+
+			// Use faked dir as socket dir
+			activeSockDirBackup := activeSockDir
+			deprecatedSockDirBackup := deprecatedSockDir
+
+			deprecatedSockDir = fs.RootDir
+			activeSockDir = fs.RootDir
+
+			defer func() {
+				deprecatedSockDir = deprecatedSockDirBackup
+				activeSockDir = activeSockDirBackup
+			}()
+
+			conf := &types.UserConfig{ResourceName: "fake_test", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			Expect(err).ToNot(HaveOccurred())
+			rs := obj.(*resourceServer)
+
+			registrationServer := createFakeRegistrationServer(deprecatedSockDir,
+				"fake_test.socket", shouldServerFail, shouldEnablePluginWatch)
+
+			if shouldRunServer {
+				if shouldEnablePluginWatch {
+					_ = rs.Start()
+				} else {
+					registrationServer.start()
+				}
+			}
+			if shouldEnablePluginWatch {
+				err = registrationServer.registerPlugin()
+			} else {
+				err = rs.register()
+			}
+			if shouldFail {
+				Expect(err).To(HaveOccurred())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+			if shouldRunServer {
+				if shouldEnablePluginWatch {
+					rs.rsConnector.Stop()
+				} else {
+					registrationServer.stop()
+				}
+			}
+		},
+		Entry("when can't connect to Kubelet should fail", false, false, true, true),
+		Entry("when device plugin unable to register with Kubelet should fail", true, false, true, true),
+		Entry("when Kubelet unable to register with device plugin should fail", true, true, true, true),
+		Entry("successfully shouldn't fail", true, false, false, false),
+		Entry("successfully shouldn't fail with plugin watcher enabled", true, true, false, false),
+	)
+	Describe("resource server lifecycle", func() {
+		// integration-like test for the resource server (positive cases)
+		var (
+			fs                      *utils.FakeFilesystem
+			activeSockDirBackup     string
+			deprecatedSockDirBackup string
+		)
+		BeforeEach(func() {
+			activeSockDirBackup = activeSockDir
+			deprecatedSockDirBackup = deprecatedSockDir
+			selectors := &types.Selectors{}
+			err := json.Unmarshal([]byte(`{"deviceIDs": ["fakeid"]}`), selectors)
+			Expect(err).NotTo(HaveOccurred())
+			fs = &utils.FakeFilesystem{}
+		})
+		AfterEach(func() {
+			activeSockDir = activeSockDirBackup
+			deprecatedSockDir = deprecatedSockDirBackup
+		})
+		Context("starting, restarting and stopping the resource server", func() {
+			It("should not fail and messages should be received on the channels without watcher mode", func() {
+				defer fs.Use()()
+				// Use faked dir as socket dir
+				deprecatedSockDir = fs.RootDir
+
+				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+				Expect(err).ToNot(HaveOccurred())
+				rs := obj.(*resourceServer)
+
+				registrationServer := createFakeRegistrationServer(deprecatedSockDir,
+					"fakename.socket", false, false)
+				registrationServer.start()
+				defer registrationServer.stop()
+
+				err = rs.Start()
+				Expect(err).NotTo(HaveOccurred())
+
+				go func() {
+					stop := <-rs.stop
+					Expect(stop).To(BeTrue())
+				}()
+				err = rs.Restart()
+				Expect(err).NotTo(HaveOccurred())
+
+				go func() {
+					stop := <-rs.stop
+					Expect(stop).To(BeTrue())
+					stop = <-rs.stopWatcher
+					Expect(stop).To(BeTrue())
+				}()
+
+				err = rs.Stop()
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("should not fail and messages should be received on the channels with watcher mode", func() {
+				defer fs.Use()()
+				// Use faked dir as socket dir
+				activeSockDir = fs.RootDir
+
+				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+				Expect(err).ToNot(HaveOccurred())
+				rs := obj.(*resourceServer)
+
+				registrationServer := createFakeRegistrationServer(activeSockDir,
+					"fakename.socket", false, true)
+
+				err = rs.Start()
+				Expect(err).NotTo(HaveOccurred())
+
+				err = registrationServer.registerPlugin()
+				Expect(err).NotTo(HaveOccurred())
+
+				go func() {
+					stop := <-rs.stop
+					Expect(stop).To(BeTrue())
+				}()
+				err = rs.Restart()
+				Expect(err).NotTo(HaveOccurred())
+
+				go func() {
+					stop := <-rs.stop
+					Expect(stop).To(BeTrue())
+				}()
+
+				err = rs.Stop()
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+		Context("starting, watching and stopping the resource server", func() {
+			It("should not fail and messages should be received on the channels", func() {
+				defer fs.Use()()
+				// Use faked dir as socket dir
+				deprecatedSockDir = fs.RootDir
+
+				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+				Expect(err).ToNot(HaveOccurred())
+				rs := obj.(*resourceServer)
+
+				registrationServer := createFakeRegistrationServer(deprecatedSockDir,
+					"fakename.socket", false, false)
+				registrationServer.start()
+				defer registrationServer.stop()
+
+				err = rs.Start()
+				Expect(err).NotTo(HaveOccurred())
+				// run socket watcher in background as in real-life
+				go rs.Watch()
+				go func() {
+					stop := <-rs.stop
+					Expect(stop).To(BeTrue())
+				}()
+				err = rs.Stop()
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	DescribeTable("allocating",
+		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
+			conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			Expect(err).ToNot(HaveOccurred())
+			rs := obj.(*resourceServer)
+
+			resp, err := rs.Allocate(context.TODO(), req)
+
+			Expect(len(resp.GetContainerResponses())).To(Equal(expectedRespLength))
+
+			if shouldFail {
+				Expect(err).To(HaveOccurred())
+			} else {
+				Expect(err).NotTo(HaveOccurred())
+			}
+		},
+		Entry("allocating successfully 1 deviceID",
+			&pluginapi.AllocateRequest{
+				ContainerRequests: []*pluginapi.ContainerAllocateRequest{{DevicesIDs: []string{"00:00.01"}}},
+			},
+			1,
+			false,
+		),
+		PEntry("allocating deviceID that does not exist",
+			&pluginapi.AllocateRequest{
+				ContainerRequests: []*pluginapi.ContainerAllocateRequest{{DevicesIDs: []string{"00:00.02"}}},
+			},
+			0,
+			true,
+		),
+		Entry("empty AllocateRequest", &pluginapi.AllocateRequest{}, 0, false),
+	)
 })
