@@ -38,7 +38,7 @@ type ResourceServer interface {
 	Start() error
 	Stop() error
 	Restart() error
-	Watch() error
+	Watch()
 }
 
 // ResourceManager manger multi plugins

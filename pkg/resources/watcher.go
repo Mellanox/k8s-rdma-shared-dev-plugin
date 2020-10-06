@@ -5,8 +5,6 @@ import (
 	"os/signal"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 type signalNotifier struct {
@@ -18,23 +16,6 @@ func (n *signalNotifier) Notify() chan os.Signal {
 	signal.Notify(sigChan, n.signals...)
 
 	return sigChan
-}
-
-func newFSWatcher(files ...string) (*fsnotify.Watcher, error) {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, f := range files {
-		err = watcher.Add(f)
-		if err != nil {
-			watcher.Close()
-			return nil, err
-		}
-	}
-
-	return watcher, nil
 }
 
 // NewSignalNotifier return signals notifier

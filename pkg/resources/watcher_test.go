@@ -3,8 +3,6 @@ package resources
 import (
 	"os"
 
-	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -38,20 +36,6 @@ func (n *mockedSignalNotifier) triggerSignal(signal os.Signal) {
 }
 
 var _ = Describe("Watcher", func() {
-	Context("newFSWatcher", func() {
-		It("Watcher for existing Dir", func() {
-			fs := utils.FakeFilesystem{}
-			defer fs.Use()()
-			fsw, err := newFSWatcher(fs.RootDir)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(fsw).ToNot(BeNil())
-		})
-		It("Watcher for non-existing Dir", func() {
-			fsw, err := newFSWatcher("fake")
-			Expect(err).To(HaveOccurred())
-			Expect(fsw).To(BeNil())
-		})
-	})
 	Context("NewOSWatcher", func() {
 		It("Watcher for signals", func() {
 			sn := mockedSignalNotifier{}

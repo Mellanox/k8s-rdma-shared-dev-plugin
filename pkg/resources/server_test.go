@@ -10,7 +10,6 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types/mocks"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 
-	"github.com/fsnotify/fsnotify"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -208,6 +207,11 @@ var _ = Describe("resourceServer tests", func() {
 				stop:        make(chan interface{}),
 			}
 
+			go func() {
+				stop := <-rs.stop
+				Expect(stop).To(BeTrue())
+			}()
+
 			err := rs.Stop()
 			Expect(err).ToNot(HaveOccurred())
 			rsc.AssertExpectations(testCallsAssertionReporter)
@@ -228,8 +232,10 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			// Dummy listener to stopWatcher to not block the test and fail
 			go func() {
-				shouldStop := <-stopWatcher
-				Expect(shouldStop).To(BeTrue())
+				stop := <-rs.stop
+				Expect(stop).To(BeTrue())
+				stop = <-rs.stopWatcher
+				Expect(stop).To(BeTrue())
 			}()
 
 			err := rs.Stop()
@@ -258,22 +264,35 @@ var _ = Describe("resourceServer tests", func() {
 				stop:        make(chan interface{}),
 			}
 
+			go func() {
+				stop := <-rs.stop
+				Expect(stop).To(BeTrue())
+			}()
+
 			err := rs.Restart()
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("failed in restart"))
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
+		It("Failed to restart server with no grpc server", func() {
+			rs := resourceServer{
+				watchMode: true,
+				stop:      make(chan interface{}),
+			}
+
+			err := rs.Restart()
+			Expect(err).To(HaveOccurred())
+		})
 		It("Failed to restart server", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
 			rsc := &mocks.ResourceServerConnector{}
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
-			rsc.On("CreateServer").Return()
+			rsc.On("Stop").Return()
 			rsc.On("DeleteServer").Return()
+			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, nil)
-			rsc.On("Stop").Return()
-			rsc.On("Close", mock.Anything).Return()
+			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, errors.New("error"))
 
 			rs := resourceServer{
 				watchMode:   true,
@@ -281,12 +300,19 @@ var _ = Describe("resourceServer tests", func() {
 				stop:        make(chan interface{}),
 			}
 
+			go func() {
+				stop := <-rs.stop
+				Expect(stop).To(BeTrue())
+			}()
+
 			err := rs.Restart()
-			Expect(err).ToNot(HaveOccurred())
+			Expect(err).To(HaveOccurred())
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
 	Context("Watch", func() {
+		fakeSocketName := "fake.socket"
+		var fakeSocketPath string
 		var deprecatedSockDirBackup string
 		var fs utils.FakeFilesystem
 		var cleanTemp func()
@@ -297,14 +323,29 @@ var _ = Describe("resourceServer tests", func() {
 			deprecatedSockDir = deprecatedSockDirBackup
 		})
 		BeforeEach(func() {
-			fs = utils.FakeFilesystem{}
+			fs = utils.FakeFilesystem{
+				Files: map[string][]byte{fakeSocketName: []byte("")},
+			}
 			cleanTemp = fs.Use()
 			deprecatedSockDir = fs.RootDir
+			fakeSocketPath = path.Join(fs.RootDir, fakeSocketName)
 		})
 		AfterEach(func() {
 			cleanTemp()
 		})
-		It("Watch socket and send notification of create successfully", func() {
+		It("Watch socket then stop watcher", func() {
+			rs := resourceServer{
+				socketName:  fakeSocketName,
+				socketPath:  fakeSocketPath,
+				stopWatcher: make(chan bool),
+				stop:        make(chan interface{}),
+			}
+			go func() {
+				rs.stopWatcher <- true
+			}()
+			rs.Watch()
+		})
+		It("Watch socket and send notification to restart successfully", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
 			rsc := &mocks.ResourceServerConnector{}
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
@@ -319,63 +360,18 @@ var _ = Describe("resourceServer tests", func() {
 			rs := resourceServer{
 				watchMode:   true,
 				rsConnector: rsc,
-				socketPath:  "fake",
+				socketName:  fakeSocketName,
+				socketPath:  "fake deleted",
 				stop:        make(chan interface{}),
+				stopWatcher: make(chan bool),
 			}
 			go func() {
-				// Wait for watch to create the socket watcher
-				time.Sleep(5 * time.Millisecond)
-				event := fsnotify.Event{Name: "fake", Op: fsnotify.Create}
-				rs.socketWatcher.Events <- event
-			}()
-			err := rs.Watch()
-			Expect(err).ToNot(HaveOccurred())
-			rsc.AssertExpectations(testCallsAssertionReporter)
-		})
-		It("Watch socket and send notification of create and failed to restart server", func() {
-			rsc := &mocks.ResourceServerConnector{}
-			rsc.On("GetServer", mock.Anything).Return(nil)
-			rsc.On("CreateServer").Return()
-			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, errors.New("failed"))
-
-			rs := resourceServer{
-				watchMode:   true,
-				socketPath:  "fake",
-				rsConnector: rsc,
-				stop:        make(chan interface{}),
-			}
-			go func() {
-				// Wait for watch to create the socket watcher
-				time.Sleep(5 * time.Millisecond)
-				event := fsnotify.Event{Name: "fake", Op: fsnotify.Create}
-				rs.socketWatcher.Events <- event
-			}()
-			err := rs.Watch()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("unable to restart server failed"))
-			rsc.AssertExpectations(testCallsAssertionReporter)
-		})
-		It("Watch socket and getting failed error from watcher", func() {
-			rs := resourceServer{}
-			go func() {
-				// Wait for watch to create the socket watcher
-				time.Sleep(5 * time.Millisecond)
-				err := errors.New("failed")
-				rs.socketWatcher.Errors <- err
-			}()
-			err := rs.Watch()
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("inotify: failed"))
-		})
-		It("Watch socket then stop watcher", func() {
-			rs := resourceServer{stopWatcher: make(chan bool)}
-			go func() {
-				// Wait for watch to create the socket watcher
-				time.Sleep(5 * time.Millisecond)
+				stop := <-rs.stop
+				Expect(stop).To(BeTrue())
 				rs.stopWatcher <- true
 			}()
-			err := rs.Watch()
-			Expect(err).ToNot(HaveOccurred())
+			rs.Watch()
+			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
 	Context("ListAndWatch", func() {
