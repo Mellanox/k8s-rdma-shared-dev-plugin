@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/jaypipes/ghw"
@@ -53,6 +54,9 @@ func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec,
 	}
 
 	rdmaSpec := rds.Get(pciAddr)
+	if err := rds.VerifyRdmaSpec(rdmaSpec); err != nil {
+		return nil, fmt.Errorf("missing RDMA device spec for device %s, %v", pciAddr, err)
+	}
 
 	return &pciNetDevice{
 		pciAddress: pciAddr,
