@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"github.com/vishvananda/netlink"
+	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
 // FakeLink is a dummy netlink struct used during testing
@@ -246,6 +247,10 @@ var _ = Describe("ResourcesManger", func() {
 	})
 	Context("GetDevices", func() {
 		It("Get full list of devices", func() {
+			rds := &mocks.RdmaDeviceSpec{}
+			rds.On("Get", mock.Anything).Return([]*pluginapi.DeviceSpec{})
+			rds.On("VerifyRdmaSpec", mock.Anything).Return(nil)
+
 			fs := &utils.FakeFilesystem{
 				Dirs: []string{
 					"sys/bus/pci/devices/0000:02:00.0/net/enp2s0f0",
@@ -268,7 +273,7 @@ var _ = Describe("ResourcesManger", func() {
 			nLink := &mocks.NetlinkManager{}
 			link := &FakeLink{netlink.LinkAttrs{EncapType: "ether"}}
 			nLink.On("LinkByName", mock.Anything).Return(link, nil)
-			rm := &resourceManager{deviceList: deviceList, netlinkManager: nLink}
+			rm := &resourceManager{deviceList: deviceList, netlinkManager: nLink, rds: rds}
 			Expect(len(rm.GetDevices())).To(Equal(2))
 		})
 	})

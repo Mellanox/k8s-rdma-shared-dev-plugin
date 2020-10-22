@@ -42,6 +42,7 @@ type resourceManager struct {
 	resourceServers []types.ResourceServer
 	deviceList      []*ghw.PCIDevice
 	netlinkManager  types.NetlinkManager
+	rds             types.RdmaDeviceSpec
 }
 
 func NewResourceManager() types.ResourceManager {
@@ -57,6 +58,7 @@ func NewResourceManager() types.ResourceManager {
 		socketSuffix:   socketSuffix,
 		watchMode:      watcherMode,
 		netlinkManager: &netlinkManager{},
+		rds:            NewRdmaDeviceSpec(requiredRdmaDevices),
 	}
 }
 
@@ -230,9 +232,8 @@ func (rm *resourceManager) DiscoverHostDevices() error {
 
 func (rm *resourceManager) GetDevices() []types.PciNetDevice {
 	newPciDevices := make([]types.PciNetDevice, 0)
-	rds := &rdmaDeviceSpec{}
 	for _, device := range rm.deviceList {
-		if newDevice, err := NewPciNetDevice(device, rds, rm.netlinkManager); err == nil {
+		if newDevice, err := NewPciNetDevice(device, rm.rds, rm.netlinkManager); err == nil {
 			newPciDevices = append(newPciDevices, newDevice)
 		} else {
 			log.Printf("error creating new device: %q", err)

@@ -75,6 +75,7 @@ type SignalNotifier interface {
 // RdmaDeviceSpec used to find the rdma devices
 type RdmaDeviceSpec interface {
 	Get(string) []*pluginapi.DeviceSpec
+	VerifyRdmaSpec([]*pluginapi.DeviceSpec) error
 }
 
 // PciNetDevice provides an interface to get generic device specific information
