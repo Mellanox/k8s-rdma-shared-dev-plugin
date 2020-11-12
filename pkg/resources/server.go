@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/net/context"
@@ -28,16 +29,20 @@ type resourcesServerPort struct {
 }
 
 type resourceServer struct {
-	resourceName string
-	watchMode    bool
-	socketName   string
-	socketPath   string
-	devs         []*pluginapi.Device
-	deviceSpec   []*pluginapi.DeviceSpec
-	stop         chan interface{}
-	stopWatcher  chan bool
-	health       chan *pluginapi.Device
-	rsConnector  types.ResourceServerPort
+	resourceName   string
+	watchMode      bool
+	socketName     string
+	socketPath     string
+	stop           chan interface{}
+	stopWatcher    chan bool
+	updateResource chan bool
+	health         chan *pluginapi.Device
+	rsConnector    types.ResourceServerPort
+	rdmaHcaMax     int
+	// Mutex protects devs and deviceSpec
+	mutex      sync.RWMutex
+	devs       []*pluginapi.Device
+	deviceSpec []*pluginapi.DeviceSpec
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -104,7 +109,6 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool, resourcePrefix,
 	socketSuffix string) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
-	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
 
 	sockDir := activeSockDir
 
@@ -112,13 +116,7 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
 	}
 
-	for _, device := range devices {
-		rdmaDeviceSpec := device.GetRdmaSpec()
-		if len(rdmaDeviceSpec) == 0 {
-			log.Printf("Warning: non-Rdma Device %s\n", device.GetPciAddr())
-		}
-		deviceSpec = append(deviceSpec, rdmaDeviceSpec...)
-	}
+	deviceSpec := getDevicesSpec(devices)
 
 	if len(deviceSpec) > 0 {
 		for n := 0; n < config.RdmaHcaMax; n++ {
@@ -140,16 +138,18 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
 
 	return &resourceServer{
-		resourceName: fmt.Sprintf("%s/%s", resourcePrefix, config.ResourceName),
-		socketName:   socketName,
-		socketPath:   filepath.Join(sockDir, socketName),
-		watchMode:    watcherMode,
-		devs:         devs,
-		deviceSpec:   deviceSpec,
-		stop:         make(chan interface{}),
-		stopWatcher:  make(chan bool),
-		health:       make(chan *pluginapi.Device),
-		rsConnector:  &resourcesServerPort{},
+		resourceName:   fmt.Sprintf("%s/%s", resourcePrefix, config.ResourceName),
+		socketName:     socketName,
+		socketPath:     filepath.Join(sockDir, socketName),
+		watchMode:      watcherMode,
+		devs:           devs,
+		deviceSpec:     deviceSpec,
+		stop:           make(chan interface{}),
+		stopWatcher:    make(chan bool),
+		updateResource: make(chan bool, 1),
+		health:         make(chan *pluginapi.Device),
+		rsConnector:    &resourcesServerPort{},
+		rdmaHcaMax:     config.RdmaHcaMax,
 	}, nil
 }
 
@@ -278,8 +278,8 @@ func (rs *resourceServer) register() error {
 
 // ListAndWatch lists devices and update that list according to the health status
 func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
-	log.Println("exposing devices: ", rs.devs)
-	_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
+	resp := new(pluginapi.ListAndWatchResponse)
+	rs.updateResource <- true
 
 	for {
 		select {
@@ -289,6 +289,17 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 			// FIXME: there is no way to recover from the Unhealthy state.
 			d.Health = pluginapi.Unhealthy
 			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
+		case <-rs.updateResource:
+			rs.mutex.RLock()
+			log.Printf("Updating \"%s\" devices", rs.resourceName)
+			resp.Devices = rs.devs
+
+			if err := s.Send(resp); err != nil {
+				log.Printf("error: failed to update \"%s\" resouces: %v", rs.resourceName, err)
+			} else {
+				log.Println("exposing devices: ", rs.devs)
+			}
+			rs.mutex.RUnlock()
 		}
 	}
 }
@@ -298,6 +309,8 @@ func (rs *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateReq
 	*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
+	rs.mutex.RLock()
+	defer rs.mutex.RUnlock()
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
 
 	for i := range r.GetContainerRequests() {
@@ -357,4 +370,80 @@ func (rs *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat 
 		rs.rsConnector.Stop()
 	}
 	return &registerapi.RegistrationStatusResponse{}, nil
+}
+
+func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
+	// Lock reading for plugin server for updating
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+
+	// Get device spec
+	deviceSpec := getDevicesSpec(devices)
+
+	// If not devices not changed skip
+	if !devicesChanged(rs.deviceSpec, deviceSpec) {
+		log.Printf("no changes to devices for \"%s\"", rs.resourceName)
+		log.Println("exposing devices: ", rs.devs)
+		return
+	}
+
+	rs.deviceSpec = deviceSpec
+
+	// In case no RDMA resource report 0 resources
+	if len(rs.deviceSpec) == 0 {
+		rs.devs = []*pluginapi.Device{}
+		rs.updateResource <- true
+
+		return
+	}
+
+	// Create devices list if not exists
+	if len(rs.devs) == 0 {
+		var devs []*pluginapi.Device
+		for n := 0; n < rs.rdmaHcaMax; n++ {
+			id := n
+			dpDevice := &pluginapi.Device{
+				ID:     strconv.Itoa(id),
+				Health: pluginapi.Healthy,
+			}
+			devs = append(devs, dpDevice)
+		}
+		rs.devs = devs
+	}
+
+	rs.updateResource <- true
+}
+
+// devicesChanged detect if original and new devices are different
+func devicesChanged(deviceList, newDeviceList []*pluginapi.DeviceSpec) bool {
+	if len(deviceList) != len(newDeviceList) {
+		return true
+	}
+
+	deviceListMap := map[string]bool{}
+	for _, dev := range deviceList {
+		deviceListMap[dev.HostPath] = true
+	}
+
+	for _, dev := range newDeviceList {
+		if _, exists := deviceListMap[dev.HostPath]; !exists {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getDevicesSpec return devicesSpec for given NetDevs
+func getDevicesSpec(devices []types.PciNetDevice) []*pluginapi.DeviceSpec {
+	devicesSpec := make([]*pluginapi.DeviceSpec, 0)
+	for _, device := range devices {
+		rdmaDeviceSpec := device.GetRdmaSpec()
+		if len(rdmaDeviceSpec) == 0 {
+			log.Printf("Warning: non-Rdma Device %s\n", device.GetPciAddr())
+		}
+		devicesSpec = append(devicesSpec, rdmaDeviceSpec...)
+	}
+
+	return devicesSpec
 }

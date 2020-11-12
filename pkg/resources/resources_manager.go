@@ -7,6 +7,7 @@ import (
 	"log"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/jaypipes/ghw"
 
@@ -34,18 +35,19 @@ var (
 
 // resourceManager for plugin
 type resourceManager struct {
-	configFile      string
-	resourcePrefix  string
-	socketSuffix    string
-	watchMode       bool
-	configList      []*types.UserConfig
-	resourceServers []types.ResourceServer
-	deviceList      []*ghw.PCIDevice
-	netlinkManager  types.NetlinkManager
-	rds             types.RdmaDeviceSpec
+	configFile             string
+	resourcePrefix         string
+	socketSuffix           string
+	watchMode              bool
+	configList             []*types.UserConfig
+	resourceServers        []types.ResourceServer
+	deviceList             []*ghw.PCIDevice
+	netlinkManager         types.NetlinkManager
+	rds                    types.RdmaDeviceSpec
+	PeriodicUpdateInterval time.Duration
 }
 
-func NewResourceManager() types.ResourceManager {
+func NewResourceManager(periodicUpdateInterval time.Duration) types.ResourceManager {
 	watcherMode := detectPluginWatchMode(activeSockDir)
 	if watcherMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
@@ -53,12 +55,13 @@ func NewResourceManager() types.ResourceManager {
 		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 	}
 	return &resourceManager{
-		configFile:     configFilePath,
-		resourcePrefix: rdmaHcaResourcePrefix,
-		socketSuffix:   socketSuffix,
-		watchMode:      watcherMode,
-		netlinkManager: &netlinkManager{},
-		rds:            NewRdmaDeviceSpec(requiredRdmaDevices),
+		configFile:             configFilePath,
+		resourcePrefix:         rdmaHcaResourcePrefix,
+		socketSuffix:           socketSuffix,
+		watchMode:              watcherMode,
+		netlinkManager:         &netlinkManager{},
+		rds:                    NewRdmaDeviceSpec(requiredRdmaDevices),
+		PeriodicUpdateInterval: periodicUpdateInterval,
 	}
 }
 
@@ -199,6 +202,9 @@ func (rm *resourceManager) DiscoverHostDevices() error {
 		log.Println("Warning: DiscoverHostDevices(): no PCI network device found")
 	}
 
+	// cleanup deviceList as this method is also called during periodic update for the resources
+	rm.deviceList = []*ghw.PCIDevice{}
+
 	for _, device := range devices {
 		devClass, err := strconv.ParseInt(device.Class.ID, 16, 64)
 		if err != nil {
@@ -275,4 +281,40 @@ func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
 	copy(newDeviceList, filteredDevice)
 
 	return newDeviceList
+}
+
+func (rm *resourceManager) PeriodicUpdate() func() {
+	stopChan := make(chan interface{})
+	if rm.PeriodicUpdateInterval > 0 {
+		ticker := time.NewTicker(rm.PeriodicUpdateInterval)
+
+		// Listen for update or stop update channels
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					if err := rm.DiscoverHostDevices(); err != nil {
+						log.Printf("error: failed to discover host devices: %v", err)
+						continue
+					}
+
+					for index, rs := range rm.resourceServers {
+						devices := rm.GetDevices()
+						filteredDevices := rm.GetFilteredDevices(devices, &rm.configList[index].Selectors)
+						rs.UpdateDevices(filteredDevices)
+					}
+				case <-stopChan:
+					ticker.Stop()
+					return
+				}
+			}
+		}()
+	}
+	// Return stop function
+	return func() {
+		if rm.PeriodicUpdateInterval > 0 {
+			stopChan <- true
+			close(stopChan)
+		}
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path"
+	"time"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types/mocks"
@@ -45,7 +46,7 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager()
+			obj := NewResourceManager(1 * time.Millisecond)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(true))
 		})
@@ -57,7 +58,7 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager()
+			obj := NewResourceManager(1 * time.Microsecond)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(false))
 		})
@@ -483,6 +484,73 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("failed to restart"))
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
+		})
+	})
+	Context("PeriodicUpdate", func() {
+		It("Update resources for resource manager", func() {
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{
+					"sys/bus/pci/devices/0000:02:00.0",
+				},
+				Files: map[string][]byte{
+					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+				},
+			}
+			defer fs.Use()()
+			os.Setenv("GHW_CHROOT", fs.RootDir)
+			defer os.Unsetenv("GHW_CHROOT")
+
+			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer.On("UpdateDevices", mock.Anything).Return()
+
+			nLink := &mocks.NetlinkManager{}
+			link := &FakeLink{netlink.LinkAttrs{EncapType: "ether"}}
+			nLink.On("LinkByName", mock.Anything).Return(link, nil)
+
+			rds := &mocks.RdmaDeviceSpec{}
+			rds.On("Get", mock.Anything).Return([]*pluginapi.DeviceSpec{})
+			rds.On("VerifyRdmaSpec", mock.Anything).Return(nil)
+
+			configList := []*types.UserConfig{{Selectors: types.Selectors{Vendors: []string{"Vendors"}}}}
+			rm := &resourceManager{
+				configList:             configList,
+				resourceServers:        []types.ResourceServer{&fakeResourceServer},
+				netlinkManager:         nLink,
+				rds:                    rds,
+				PeriodicUpdateInterval: 1 * time.Millisecond,
+			}
+
+			stopPeriodicUpdate := rm.PeriodicUpdate()
+			time.Sleep(2 * time.Second)
+			Expect(len(rm.deviceList)).To(Equal(1))
+			stopPeriodicUpdate()
+			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
+		})
+		It("No update when periodic interval is 0", func() {
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{
+					"sys/bus/pci/devices/0000:02:00.0",
+				},
+				Files: map[string][]byte{
+					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+				},
+			}
+			defer fs.Use()()
+			os.Setenv("GHW_CHROOT", fs.RootDir)
+			defer os.Unsetenv("GHW_CHROOT")
+
+			fakeResourceServer := mocks.ResourceServer{}
+			rm := &resourceManager{
+				resourceServers:        []types.ResourceServer{&fakeResourceServer},
+				PeriodicUpdateInterval: 0 * time.Millisecond,
+			}
+
+			rm.PeriodicUpdate()
+			time.Sleep(2 * time.Second)
+			Expect(len(rm.deviceList)).To(Equal(0))
+			fakeResourceServer.AssertNotCalled(testCallsAssertionReporter, "UpdateDevices")
 		})
 	})
 })

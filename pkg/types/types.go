@@ -39,6 +39,7 @@ type ResourceServer interface {
 	Stop() error
 	Restart() error
 	Watch()
+	UpdateDevices([]PciNetDevice)
 }
 
 // ResourceManager manger multi plugins
@@ -52,6 +53,7 @@ type ResourceManager interface {
 	StopAllServers() error
 	RestartAllServers() error
 	GetFilteredDevices(devices []PciNetDevice, selector *Selectors) []PciNetDevice
+	PeriodicUpdate() func()
 }
 
 // ResourceServerPort to connect the resources server to k8s
