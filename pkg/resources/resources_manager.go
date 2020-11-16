@@ -26,6 +26,9 @@ const (
 	netClass             = 0x02 // Device class - Network controller
 	maxVendorNameLength  = 20
 	maxProductNameLength = 40
+
+	// Default periodic update interval
+	defaultPeriodicUpdateInterval = 60 * time.Second
 )
 
 var (
@@ -47,7 +50,7 @@ type resourceManager struct {
 	PeriodicUpdateInterval time.Duration
 }
 
-func NewResourceManager(periodicUpdateInterval time.Duration) types.ResourceManager {
+func NewResourceManager() types.ResourceManager {
 	watcherMode := detectPluginWatchMode(activeSockDir)
 	if watcherMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
@@ -55,13 +58,12 @@ func NewResourceManager(periodicUpdateInterval time.Duration) types.ResourceMana
 		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 	}
 	return &resourceManager{
-		configFile:             configFilePath,
-		resourcePrefix:         rdmaHcaResourcePrefix,
-		socketSuffix:           socketSuffix,
-		watchMode:              watcherMode,
-		netlinkManager:         &netlinkManager{},
-		rds:                    NewRdmaDeviceSpec(requiredRdmaDevices),
-		PeriodicUpdateInterval: periodicUpdateInterval,
+		configFile:     configFilePath,
+		resourcePrefix: rdmaHcaResourcePrefix,
+		socketSuffix:   socketSuffix,
+		watchMode:      watcherMode,
+		netlinkManager: &netlinkManager{},
+		rds:            NewRdmaDeviceSpec(requiredRdmaDevices),
 	}
 }
 
@@ -79,6 +81,21 @@ func (rm *resourceManager) ReadConfig() error {
 	}
 
 	log.Printf("loaded config: %+v \n", config.ConfigList)
+
+	// if periodic update is not set then use the default value
+	if config.PeriodicUpdateInterval == nil {
+		log.Println("no periodic update interval is set, use default interval 60 seconds")
+		rm.PeriodicUpdateInterval = defaultPeriodicUpdateInterval
+	} else {
+		PeriodicUpdateInterval := *config.PeriodicUpdateInterval
+		if PeriodicUpdateInterval == 0 {
+			log.Println("warning: periodic update interval is 0, no periodic update will run")
+		} else {
+			log.Printf("periodic update interval: %+d \n", PeriodicUpdateInterval)
+		}
+		rm.PeriodicUpdateInterval = time.Duration(PeriodicUpdateInterval) * time.Second
+	}
+
 	for i := range config.ConfigList {
 		rm.configList = append(rm.configList, &config.ConfigList[i])
 	}
@@ -88,6 +105,10 @@ func (rm *resourceManager) ReadConfig() error {
 // ValidateConfigs validate the configurations
 func (rm *resourceManager) ValidateConfigs() error {
 	resourceName := make(map[string]string)
+
+	if rm.PeriodicUpdateInterval < 0 {
+		return fmt.Errorf("invalid \"periodicUpdateInterval\" configuration \"%d\"", rm.PeriodicUpdateInterval)
+	}
 
 	if len(rm.configList) < 1 {
 		return fmt.Errorf("no resources configuration found")
