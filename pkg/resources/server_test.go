@@ -621,6 +621,9 @@ var _ = Describe("resourceServer tests", func() {
 				err = rs.Restart()
 				Expect(err).NotTo(HaveOccurred())
 
+				err = registrationServer.registerPlugin()
+				Expect(err).NotTo(HaveOccurred())
+
 				go func() {
 					stop := <-rs.stop
 					Expect(stop).To(BeTrue())
