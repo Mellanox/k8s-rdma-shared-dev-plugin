@@ -440,6 +440,50 @@ var _ = Describe("resourceServer tests", func() {
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
+	Context("UpdateDevices", func() {
+		It("should receive signal of updating resource", func() {
+			rs := &resourceServer{
+				updateResource: make(chan bool),
+				rdmaHcaMax:     10,
+			}
+
+			go func() { rs.UpdateDevices(fakeDeviceList) }()
+			Expect(<-rs.updateResource).To(BeTrue())
+			Expect(len(rs.deviceSpec)).To(Equal(1))
+			Expect(len(rs.devs)).To(Equal(10))
+		})
+		It("resources not updated", func() {
+			rs := &resourceServer{
+				updateResource: make(chan bool),
+				rdmaHcaMax:     10,
+			}
+
+			var emptyDevicesList []types.PciNetDevice
+			rs.UpdateDevices(emptyDevicesList)
+			Expect(len(rs.deviceSpec)).To(Equal(0))
+			Expect(len(rs.devs)).To(Equal(0))
+		})
+	})
+	Context("devicesChanged", func() {
+		It("device is present and did not change", func() {
+			deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
+			newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
+			changed := devicesChanged(deviceList, newDeviceList)
+			Expect(changed).To(BeFalse())
+		})
+		It("device changed - num of devices in deviceList", func() {
+			deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
+			newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}, {HostPath: "/foo/bar2"}}
+			changed := devicesChanged(deviceList, newDeviceList)
+			Expect(changed).To(BeTrue())
+		})
+		It("device changed - mounts changed for one of the devices in the deviceList", func() {
+			deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
+			newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar2"}}
+			changed := devicesChanged(deviceList, newDeviceList)
+			Expect(changed).To(BeTrue())
+		})
+	})
 	DescribeTable("registering with Kubelet",
 		func(shouldRunServer, shouldEnablePluginWatch, shouldServerFail, shouldFail bool) {
 			fs := &utils.FakeFilesystem{}
@@ -577,6 +621,9 @@ var _ = Describe("resourceServer tests", func() {
 				err = rs.Restart()
 				Expect(err).NotTo(HaveOccurred())
 
+				err = registrationServer.registerPlugin()
+				Expect(err).NotTo(HaveOccurred())
+
 				go func() {
 					stop := <-rs.stop
 					Expect(stop).To(BeTrue())
@@ -612,50 +659,6 @@ var _ = Describe("resourceServer tests", func() {
 				}()
 				err = rs.Stop()
 				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-		Context("UpdateDevices", func() {
-			It("should receive signal of updating resource", func() {
-				rs := &resourceServer{
-					updateResource: make(chan bool),
-					rdmaHcaMax:     10,
-				}
-
-				go func() { rs.UpdateDevices(fakeDeviceList) }()
-				Expect(<-rs.updateResource).To(BeTrue())
-				Expect(len(rs.deviceSpec)).To(Equal(1))
-				Expect(len(rs.devs)).To(Equal(10))
-			})
-			It("resources not updated", func() {
-				rs := &resourceServer{
-					updateResource: make(chan bool),
-					rdmaHcaMax:     10,
-				}
-
-				var emptyDevicesList []types.PciNetDevice
-				rs.UpdateDevices(emptyDevicesList)
-				Expect(len(rs.deviceSpec)).To(Equal(0))
-				Expect(len(rs.devs)).To(Equal(0))
-			})
-		})
-		Context("devicesChanged", func() {
-			It("device is present and did not change", func() {
-				deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
-				newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
-				changed := devicesChanged(deviceList, newDeviceList)
-				Expect(changed).To(BeFalse())
-			})
-			It("device changed - num of devices in deviceList", func() {
-				deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
-				newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}, {HostPath: "/foo/bar2"}}
-				changed := devicesChanged(deviceList, newDeviceList)
-				Expect(changed).To(BeTrue())
-			})
-			It("device changed - mounts changed for one of the devices in the deviceList", func() {
-				deviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar"}}
-				newDeviceList := []*pluginapi.DeviceSpec{{HostPath: "/foo/bar2"}}
-				changed := devicesChanged(deviceList, newDeviceList)
-				Expect(changed).To(BeTrue())
 			})
 		})
 	})
