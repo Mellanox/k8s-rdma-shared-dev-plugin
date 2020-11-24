@@ -46,7 +46,7 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager(1 * time.Millisecond)
+			obj := NewResourceManager()
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(true))
 		})
@@ -58,13 +58,46 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager(1 * time.Microsecond)
+			obj := NewResourceManager()
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(false))
 		})
 	})
 	Context("ReadConfig", func() {
-		It("Read valid config file", func() {
+		It("Read valid config file with non default periodic update", func() {
+			configData := `{"configList": [{
+             "resourceName": "hca_shared_devices_a",
+             "rdmaHcaMax": 1000,
+             "devices": ["ib0", "ib1"]
+           },
+           {
+             "resourceName": "hca_shared_devices_b",
+             "rdmaHcaMax": 500,
+             "selectors": {"vendors": ["15b3"],
+                           "deviceIDs": ["1017"],
+                           "ifNames": ["ib2", "ib3"]}
+           }
+        ],
+         "periodicUpdateInterval": 30}`
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{"tmp"},
+				Files: map[string][]byte{
+					"tmp/config.json": []byte(configData),
+				},
+			}
+			defer fs.Use()()
+
+			rm := &resourceManager{configFile: fs.RootDir + "/tmp/config.json"}
+			err := rm.ReadConfig()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(len(rm.configList)).To(Equal(2))
+			Expect(len(rm.configList[0].Devices)).To(Equal(2))
+			Expect(len(rm.configList[1].Selectors.Vendors)).To(Equal(1))
+			Expect(len(rm.configList[1].Selectors.DeviceIDs)).To(Equal(1))
+			Expect(len(rm.configList[1].Selectors.IfNames)).To(Equal(2))
+			Expect(rm.PeriodicUpdateInterval).To(Equal(30 * time.Second))
+		})
+		It("Read valid config file with default periodic update", func() {
 			configData := `{"configList": [{
              "resourceName": "hca_shared_devices_a",
              "rdmaHcaMax": 1000,
@@ -94,6 +127,7 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(len(rm.configList[1].Selectors.Vendors)).To(Equal(1))
 			Expect(len(rm.configList[1].Selectors.DeviceIDs)).To(Equal(1))
 			Expect(len(rm.configList[1].Selectors.IfNames)).To(Equal(2))
+			Expect(rm.PeriodicUpdateInterval).To(Equal(60 * time.Second))
 		})
 		It("non existing config file", func() {
 
@@ -244,6 +278,12 @@ var _ = Describe("ResourcesManger", func() {
 			rm.configList = configlist
 			err := rm.ValidateConfigs()
 			Expect(err).To(HaveOccurred())
+		})
+		It("configuration with invalid \"periodicUpdateInterval\"", func() {
+			rm := &resourceManager{PeriodicUpdateInterval: -10}
+			err := rm.ValidateConfigs()
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid \"periodicUpdateInterval\" configuration \"-10\""))
 		})
 	})
 	Context("GetDevices", func() {

@@ -29,7 +29,8 @@ type UserConfig struct {
 
 // UserConfigList config list for servers
 type UserConfigList struct {
-	ConfigList []UserConfig `json:"configList"`
+	PeriodicUpdateInterval *int         `json:"periodicUpdateInterval"`
+	ConfigList             []UserConfig `json:"configList"`
 }
 
 // ResourceServer is gRPC server implements K8s device plugin api

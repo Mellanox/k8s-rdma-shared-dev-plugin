@@ -79,6 +79,7 @@ The plugin has several configuration fields, this section explains each field us
 
 ```json
 {
+  "periodicUpdateInterval": 300,
   "configList": [{
     "resourceName": "hca_shared_devices_a",
     "rdmaHcaMax": 1000,
@@ -96,6 +97,11 @@ The plugin has several configuration fields, this section explains each field us
   ]
 }
 ```
+
+`periodicUpdateInterval` is the time interval in seconds to update the resources according to host devices in case of changes.
+Notes:
+  - if `periodicUpdateInterval` is 0 then periodic update for host devices will be disabled.
+  - if `periodicUpdateInterval` is not set then default periodic update interval of 60 seconds will be used.
 
 `"configList"` should contain a list of config objects. Each config object may consist of following fields:
 

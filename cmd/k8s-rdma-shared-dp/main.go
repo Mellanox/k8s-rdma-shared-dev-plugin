@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"syscall"
-	"time"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/resources"
 )
@@ -16,9 +15,6 @@ var (
 	commit  = "unknown commit"
 	date    = "unknown date"
 )
-
-// Periodic Update interval
-const periodicUpdateInterval = 60 * time.Second
 
 func printVersionString() string {
 	return fmt.Sprintf("k8s-rdma-shared-dev-plugin version:%s, commit:%s, date:%s", version, commit, date)
@@ -40,7 +36,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager(periodicUpdateInterval)
+	rm := resources.NewResourceManager()
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {

@@ -6,6 +6,7 @@ metadata:
 data:
   config.json: |
     {
+        "periodicUpdateInterval": 300,
         "configList": [{
              "resourceName": "hca_shared_devices_a",
              "rdmaHcaMax": 1000,
