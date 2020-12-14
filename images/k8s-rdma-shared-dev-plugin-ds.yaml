@@ -34,6 +34,8 @@ spec:
             mountPath: /var/lib/kubelet/
           - name: config
             mountPath: /k8s-rdma-shared-dev-plugin
+          - name: devs
+            mountPath: /dev/
       volumes:
         - name: device-plugin
           hostPath:
@@ -44,3 +46,6 @@ spec:
             items:
             - key: config.json
               path: config.json
+        - name: devs
+          hostPath:
+            path: /dev/
