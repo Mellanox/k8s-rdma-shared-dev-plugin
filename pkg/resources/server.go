@@ -297,7 +297,7 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 			if err := s.Send(resp); err != nil {
 				log.Printf("error: failed to update \"%s\" resouces: %v", rs.resourceName, err)
 			} else {
-				log.Println("exposing devices: ", rs.devs)
+				log.Printf("exposing \"%d\" devices", len(rs.devs))
 			}
 			rs.mutex.RUnlock()
 		}
@@ -383,7 +383,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	// If not devices not changed skip
 	if !devicesChanged(rs.deviceSpec, deviceSpec) {
 		log.Printf("no changes to devices for \"%s\"", rs.resourceName)
-		log.Println("exposing devices: ", rs.devs)
+		log.Printf("exposing \"%d\" devices", len(rs.devs))
 		return
 	}
 
