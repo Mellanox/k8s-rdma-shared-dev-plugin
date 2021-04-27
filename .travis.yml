@@ -11,6 +11,8 @@ go:
 
 before_script:
   - go get -u github.com/mattn/goveralls
+  - sudo apt-get update -qq
+  - sudo apt-get install hwdata -yq
 
 script:
   - make lint
