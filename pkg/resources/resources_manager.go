@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jaypipes/ghw"
+	"github.com/vishvananda/netlink"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
@@ -29,6 +30,9 @@ const (
 
 	// Default periodic update interval
 	defaultPeriodicUpdateInterval = 60 * time.Second
+
+	// RDMA subsystem network namespace mode
+	rdmaExclusive = "exclusive"
 )
 
 var (
@@ -147,6 +151,24 @@ func (rm *resourceManager) ValidateConfigs() error {
 		resourceName[conf.ResourceName] = conf.ResourceName
 	}
 
+	return nil
+}
+
+// ValidateRdmaSystemMode ensure RDMA subsystem network namespace mode is shared
+func (rm *resourceManager) ValidateRdmaSystemMode() error {
+	mode, err := netlink.RdmaSystemGetNetnsMode()
+	if err != nil {
+		if err.Error() == "invalid argument" {
+			log.Printf("too old kernel to get RDMA subsystem")
+			return nil
+		}
+
+		return fmt.Errorf("can not get RDMA subsystem network namespace mode")
+	}
+
+	if mode == rdmaExclusive {
+		return fmt.Errorf("incorrect RDMA subsystem network namespace")
+	}
 	return nil
 }
 

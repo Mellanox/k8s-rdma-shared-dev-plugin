@@ -47,6 +47,7 @@ type ResourceServer interface {
 type ResourceManager interface {
 	ReadConfig() error
 	ValidateConfigs() error
+	ValidateRdmaSystemMode() error
 	DiscoverHostDevices() error
 	GetDevices() []PciNetDevice
 	InitServers() error
