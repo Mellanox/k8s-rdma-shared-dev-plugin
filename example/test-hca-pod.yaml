@@ -17,5 +17,5 @@ spec:
     - sh
     - -c
     - |
-      ls -l /dev/infiniband /sys/class/net
+      ls -l /dev/infiniband /sys/class/infiniband /sys/class/net
       sleep 1000000
