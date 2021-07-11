@@ -47,6 +47,10 @@ func main() {
 		log.Fatalf("Exiting.. one or more invalid configuration(s) given: %v", err)
 	}
 
+	if err := rm.ValidateRdmaSystemMode(); err != nil {
+		log.Fatalf("Exiting.. can not change : %v", err)
+	}
+
 	log.Println("Discovering host devices")
 	if err := rm.DiscoverHostDevices(); err != nil {
 		log.Fatalf("Error: error discovering host devices %v \n", err)
