@@ -42,6 +42,22 @@ func (fs *FakeFilesystem) Use() func() {
 			panic(fmt.Errorf("error creating fake symlink: %s", osErr.Error()))
 		}
 	}
+	err = os.MkdirAll(path.Join(fs.RootDir, "usr/share/hwdata"), 0755)
+	if err != nil {
+		panic(fmt.Errorf("error creating fake directory: %s", err.Error()))
+	}
+
+	// TODO: Remove writing pci.ids file once ghw is mocked
+	// This is to fix the CI failure where ghw lib fails to
+	// unzip pci.ids file downloaded from internet.
+	pciData, err := ioutil.ReadFile("/usr/share/hwdata/pci.ids")
+	if err != nil {
+		panic(fmt.Errorf("error reading file: %s", err.Error()))
+	}
+	err = ioutil.WriteFile(path.Join(fs.RootDir, "usr/share/hwdata/pci.ids"), pciData, 0644)
+	if err != nil {
+		panic(fmt.Errorf("error creating fake file: %s", err.Error()))
+	}
 
 	sysNetDevices = path.Join(fs.RootDir, "/sys/class/net")
 
