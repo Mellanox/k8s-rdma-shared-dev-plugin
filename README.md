@@ -4,11 +4,11 @@
 [![Coverage Status](https://coveralls.io/repos/github/Mellanox/k8s-rdma-shared-dev-plugin/badge.svg)](https://coveralls.io/github/Mellanox/k8s-rdma-shared-dev-plugin)
 
 # k8s-rdma-shared-dev-plugin
-(https://hub.docker.com/r/rdma/k8s-rdma-shared-dev-plugin)
+(https://hub.docker.com/r/mellanox/k8s-rdma-shared-dev-plugin)
 
 This is simple rdma device plugin that support IB and RoCE HCA.
 This plugin runs as daemonset.
-Its container image is available at rdma/k8s-rdma-shared-dev-plugin.
+Its container image is available at mellanox/k8s-rdma-shared-dev-plugin.
 
 # How to use device plugin
 
@@ -155,3 +155,13 @@ To allow proper node selection [Node Feature Discovery (NFD)](https://github.com
 ```
 
 RDMA device plugin can then be deployed on nodes with `feature.node.kubernetes.io/custom-rdma.available=true`, which indicates that the node is RDMA capable and RDMA modules are loaded.
+
+# Docker image
+RDMA shared device plugin uses `alpine` base image by default. To build RDMA shared device plugin with
+another base image you need to pass `BASE_IMAGE` argument:
+
+```
+docker build -t k8s-rdma-shared-dev-plugin \
+--build-arg BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal:latest \
+.
+```
