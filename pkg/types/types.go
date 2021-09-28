@@ -101,4 +101,5 @@ type DeviceSelector interface {
 // NetlinkManager is an interface to mock nelink library
 type NetlinkManager interface {
 	LinkByName(string) (netlink.Link, error)
+	LinkSetUp(netlink.Link) error
 }
