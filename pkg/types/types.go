@@ -93,7 +93,7 @@ type PciNetDevice interface {
 	GetRdmaSpec() []*pluginapi.DeviceSpec
 }
 
-// DeviceSelector provides an interface for filtering a list of devices
+// DeviceSelector povides an interface for filtering a list of devices
 type DeviceSelector interface {
 	Filter([]PciNetDevice) []PciNetDevice
 }
