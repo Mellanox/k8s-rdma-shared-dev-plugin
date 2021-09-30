@@ -106,9 +106,13 @@ test-coverage: test-coverage-tools | $(BASE) ; $(info  running coverage tests...
 		$Q cd $(BASE); $(GO) test -covermode=$(COVERAGE_MODE) -coverprofile=k8s-rdma-shared-dev-plugin.cover ./...
 
 # Container image
-.PHONY: image
+.PHONY: image ubi-image
 image: | $(BASE) ; $(info Building Docker image...)  ## Build conatiner image
 	$(IMAGE_BUILDER) build -t $(TAG) -f $(DOCKERFILE)  $(CURDIR) $(IMAGE_BUILD_OPTS)
+
+ubi-image: DOCKERFILE=$(CURDIR)/Dockerfile.ubi
+ubi-image: TAG=mellanox/k8s-rdma-shared-dev-plugin-ubi
+ubi-image: image       ## Build UBI-based container image
 
 # Misc
 
