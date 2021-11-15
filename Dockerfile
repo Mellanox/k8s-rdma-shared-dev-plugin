@@ -1,4 +1,4 @@
-ARG BASE_IMAGE=alpine:3.14.0
+ARG BASE_IMAGE=alpine:3.14.3
 FROM golang:alpine as builder
 
 ADD . /usr/src/k8s-rdma-shared-dp
