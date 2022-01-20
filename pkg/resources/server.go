@@ -279,7 +279,11 @@ func (rs *resourceServer) register() error {
 // ListAndWatch lists devices and update that list according to the health status
 func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	resp := new(pluginapi.ListAndWatchResponse)
-	rs.updateResource <- true
+
+	// Send initial list of devices
+	if err := rs.sendDevices(resp, s); err != nil {
+		return err
+	}
 
 	for {
 		select {
@@ -290,18 +294,29 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 			d.Health = pluginapi.Unhealthy
 			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
 		case <-rs.updateResource:
-			rs.mutex.RLock()
-			log.Printf("Updating \"%s\" devices", rs.resourceName)
-			resp.Devices = rs.devs
-
-			if err := s.Send(resp); err != nil {
-				log.Printf("error: failed to update \"%s\" resouces: %v", rs.resourceName, err)
-			} else {
-				log.Printf("exposing \"%d\" devices", len(rs.devs))
+			if err := rs.sendDevices(resp, s); err != nil {
+				// The old stream may not be closed properly, return to close it
+				// and pass the update event to the new stream for processing
+				rs.updateResource <- true
+				return err
 			}
-			rs.mutex.RUnlock()
 		}
 	}
+}
+
+func (rs *resourceServer) sendDevices(resp *pluginapi.ListAndWatchResponse,
+	s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	rs.mutex.RLock()
+	defer rs.mutex.RUnlock()
+	log.Printf("Updating \"%s\" devices", rs.resourceName)
+	resp.Devices = rs.devs
+
+	if err := s.Send(resp); err != nil {
+		log.Printf("error: failed to update \"%s\" resouces: %v", rs.resourceName, err)
+		return err
+	}
+	log.Printf("exposing \"%d\" devices", len(rs.devs))
+	return nil
 }
 
 // Allocate which return list of devices.
