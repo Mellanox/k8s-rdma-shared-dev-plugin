@@ -165,3 +165,7 @@ docker build -t k8s-rdma-shared-dev-plugin \
 --build-arg BASE_IMAGE=registry.access.redhat.com/ubi8/ubi-minimal:latest \
 .
 ```
+
+> __Note:__ Building image with alpine v3.14.x requires Docker 20.10.0 or newer. for more information refer to
+[Alpine 3.14.0 Release Notes](https://wiki.alpinelinux.org/wiki/Release_Notes_for_Alpine_3.14.0#faccessat2)
+
