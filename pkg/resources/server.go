@@ -287,6 +287,9 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 
 	for {
 		select {
+		case <-s.Context().Done():
+			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
+			return nil
 		case <-rs.stop:
 			return nil
 		case d := <-rs.health:
