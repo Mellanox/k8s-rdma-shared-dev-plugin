@@ -27,11 +27,20 @@ const (
 type devPluginListAndWatchServerMock struct {
 	grpc.ServerStream
 	devices []*pluginapi.Device
+	ctx     context.Context
 }
 
 func (x *devPluginListAndWatchServerMock) Send(m *pluginapi.ListAndWatchResponse) error {
 	x.devices = m.Devices
 	return nil
+}
+
+func (x *devPluginListAndWatchServerMock) Context() context.Context {
+	return x.ctx
+}
+
+func (x *devPluginListAndWatchServerMock) SetContext(ctx context.Context) {
+	x.ctx = ctx
 }
 
 var _ = Describe("resourceServer tests", func() {
@@ -395,11 +404,23 @@ var _ = Describe("resourceServer tests", func() {
 			}()
 
 			s := &devPluginListAndWatchServerMock{}
+			s.SetContext(context.Background())
 			err = rs.ListAndWatch(nil, s)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s.devices).To(Equal(rs.devs))
 			Expect(len(s.devices)).To(Equal(100))
 			Expect(s.devices[5].Health).To(Equal(pluginapi.Unhealthy))
+		})
+		It("Stop ListAndWatch when stream is closed", func() {
+			rs := resourceServer{resourceName: "fake", socketName: "fake.sock"}
+			s := &devPluginListAndWatchServerMock{}
+			ctx, cancel := context.WithCancel(context.Background())
+			s.SetContext(ctx)
+			go func() {
+				cancel()
+			}()
+			err := rs.ListAndWatch(nil, s)
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 	Context("Allocate", func() {

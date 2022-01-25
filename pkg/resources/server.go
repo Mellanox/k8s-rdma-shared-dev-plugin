@@ -287,6 +287,9 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 
 	for {
 		select {
+		case <-s.Context().Done():
+			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
+			return nil
 		case <-rs.stop:
 			return nil
 		case d := <-rs.health:
@@ -388,9 +391,17 @@ func (rs *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat 
 }
 
 func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
+	var needUpdate bool
+
 	// Lock reading for plugin server for updating
 	rs.mutex.Lock()
-	defer rs.mutex.Unlock()
+	defer func() {
+		rs.mutex.Unlock()
+		// Update event may block, so it must be sent after mutex.Unlock() to avoid deadlock caused by nesting
+		if needUpdate {
+			rs.updateResource <- true
+		}
+	}()
 
 	// Get device spec
 	deviceSpec := getDevicesSpec(devices)
@@ -407,7 +418,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	// In case no RDMA resource report 0 resources
 	if len(rs.deviceSpec) == 0 {
 		rs.devs = []*pluginapi.Device{}
-		rs.updateResource <- true
+		needUpdate = true
 
 		return
 	}
@@ -426,7 +437,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 		rs.devs = devs
 	}
 
-	rs.updateResource <- true
+	needUpdate = true
 }
 
 // devicesChanged detect if original and new devices are different
