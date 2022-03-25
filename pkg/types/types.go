@@ -21,10 +21,11 @@ type Selectors struct {
 
 // UserConfig configuration for device plugin
 type UserConfig struct {
-	ResourceName string    `json:"resourceName"`
-	RdmaHcaMax   int       `json:"rdmaHcaMax"`
-	Devices      []string  `json:"devices"`
-	Selectors    Selectors `json:"selectors"`
+	ResourceName   string    `json:"resourceName"`
+	ResourcePrefix string    `json:"resourcePrefix"`
+	RdmaHcaMax     int       `json:"rdmaHcaMax"`
+	Devices        []string  `json:"devices"`
+	Selectors      Selectors `json:"selectors"`
 }
 
 // UserConfigList config list for servers

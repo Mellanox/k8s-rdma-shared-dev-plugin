@@ -55,8 +55,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -70,8 +70,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -85,12 +85,12 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
 			fakePciDevice := &mocks.PciNetDevice{}
 			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
 			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
 			deviceList := []types.PciNetDevice{fakePciDevice}
-			obj, err := newResourceServer(conf, deviceList, true, "rdma", "socket")
+			obj, err := newResourceServer(conf, deviceList, true, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -104,8 +104,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -119,8 +119,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -129,8 +129,8 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(len(rs.devs)).To(Equal(0))
 		})
 		It("server with plugin with invalid max number of resources", func() {
-			conf := &types.UserConfig{ResourceName: "test_server", RdmaHcaMax: -100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: -100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 			Expect(err).To(HaveOccurred())
 			Expect(obj).To(BeNil())
 		})
@@ -387,8 +387,8 @@ var _ = Describe("resourceServer tests", func() {
 				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
 			}
 			defer fs.Use()()
-			conf := &types.UserConfig{RdmaHcaMax: 100, ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake", "fake")
+			conf := &types.UserConfig{RdmaHcaMax: 100, ResourcePrefix: "rdma", ResourceName: "fake"}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake")
 			Expect(err).ToNot(HaveOccurred())
 
 			rs := obj.(*resourceServer)
@@ -522,8 +522,8 @@ var _ = Describe("resourceServer tests", func() {
 				activeSockDir = activeSockDirBackup
 			}()
 
-			conf := &types.UserConfig{ResourceName: "fake_test", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "fake_test", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 
@@ -586,8 +586,8 @@ var _ = Describe("resourceServer tests", func() {
 				// Use faked dir as socket dir
 				deprecatedSockDir = fs.RootDir
 
-				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -621,8 +621,8 @@ var _ = Describe("resourceServer tests", func() {
 				// Use faked dir as socket dir
 				activeSockDir = fs.RootDir
 
-				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -660,8 +660,8 @@ var _ = Describe("resourceServer tests", func() {
 				// Use faked dir as socket dir
 				deprecatedSockDir = fs.RootDir
 
-				conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, false, "rdma", "socket")
+				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -686,8 +686,8 @@ var _ = Describe("resourceServer tests", func() {
 
 	DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
-			conf := &types.UserConfig{ResourceName: "fakename", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "rdma", "socket")
+			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 
