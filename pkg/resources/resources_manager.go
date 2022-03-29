@@ -120,7 +120,7 @@ func (rm *resourceManager) ValidateConfigs() error {
 
 	for _, conf := range rm.configList {
 		// check if name contains acceptable characters
-		if !validResourceNameOrPrefix(conf.ResourceName) {
+		if !validResourceName(conf.ResourceName) {
 			return fmt.Errorf("error: resource name \"%s\" contains invalid characters", conf.ResourceName)
 		}
 		// check resource names are unique
@@ -129,11 +129,9 @@ func (rm *resourceManager) ValidateConfigs() error {
 			// resource name already exist
 			return fmt.Errorf("error: resource name \"%s\" already exists", conf.ResourceName)
 		}
-		// If prefix is not configured - use the default one. Otherwise validate if it contains acceptable characters
+		// If prefix is not configured - use the default one
 		if conf.ResourcePrefix == "" {
 			conf.ResourcePrefix = rm.defaultResourcePrefix
-		} else if !validResourceNameOrPrefix(conf.ResourcePrefix) {
-			return fmt.Errorf("error: resource prefix \"%s\" contains invalid characters", conf.ResourcePrefix)
 		}
 
 		if conf.RdmaHcaMax < 0 {
@@ -247,7 +245,7 @@ func (rm *resourceManager) RestartAllServers() error {
 	return nil
 }
 
-func validResourceNameOrPrefix(name string) bool {
+func validResourceName(name string) bool {
 	// name regex
 	var validString = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 	return validString.MatchString(name)
