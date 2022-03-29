@@ -4,22 +4,22 @@
 [![Coverage Status](https://coveralls.io/repos/github/Mellanox/k8s-rdma-shared-dev-plugin/badge.svg)](https://coveralls.io/github/Mellanox/k8s-rdma-shared-dev-plugin)
 
 # k8s-rdma-shared-dev-plugin
+
 (https://hub.docker.com/r/mellanox/k8s-rdma-shared-dev-plugin)
 
-This is simple rdma device plugin that support IB and RoCE HCA.
-This plugin runs as daemonset.
-Its container image is available at mellanox/k8s-rdma-shared-dev-plugin.
+This is simple rdma device plugin that support IB and RoCE HCA. This plugin runs as daemonset. Its container image is
+available at mellanox/k8s-rdma-shared-dev-plugin.
 
 # How to use device plugin
 
 **1.** Use CNI plugin such as Contiv, Calico, Cluster
 
-Make sure to configure ib0 or appropriate IPoIB netdevice as the parent netdevice for creating overlay/virtual netdevices.
+Make sure to configure ib0 or appropriate IPoIB netdevice as the parent netdevice for creating overlay/virtual
+netdevices.
 
 **2.** Create ConfigMap
 
-Create config map to describe mode as "hca" mode.
-This is per node configuration.
+Create config map to describe mode as "hca" mode. This is per node configuration.
 
 ```
 kubectl create -f images/k8s-rdma-shared-dev-plugin-config-map.yaml
@@ -34,6 +34,7 @@ kubectl create -f images/k8s-rdma-shared-dev-plugin-ds.yaml
 **4.** Create Test pod
 
 Create test pod which requests 1 vhca resource.
+
 ```
 kubectl create -f example/test-hca-pod.yaml
 ```
@@ -75,16 +76,18 @@ kubectl create -f <rdma-app.yaml>
 ```
 
 # RDMA Shared Device Plugin Configurations
+
 The plugin has several configuration fields, this section explains each field usage
 
 ```json
 {
   "periodicUpdateInterval": 300,
   "configList": [{
-    "resourceName": "hca_shared_devices_a",
-    "rdmaHcaMax": 1000,
-    "devices": ["ib0", "ib1"]
-  },
+      "resourceName": "hca_shared_devices_a",
+      "resourcePrefix": "example_prefix",
+      "rdmaHcaMax": 1000,
+      "devices": ["ib0", "ib1"]
+    },
     {
       "resourceName": "hca_shared_devices_b",
       "rdmaHcaMax": 500,
@@ -98,26 +101,27 @@ The plugin has several configuration fields, this section explains each field us
 }
 ```
 
-`periodicUpdateInterval` is the time interval in seconds to update the resources according to host devices in case of changes.
-Notes:
-  - if `periodicUpdateInterval` is 0 then periodic update for host devices will be disabled.
-  - if `periodicUpdateInterval` is not set then default periodic update interval of 60 seconds will be used.
+`periodicUpdateInterval` is the time interval in seconds to update the resources according to host devices in case of
+changes. Notes:
+
+- if `periodicUpdateInterval` is 0 then periodic update for host devices will be disabled.
+- if `periodicUpdateInterval` is not set then default periodic update interval of 60 seconds will be used.
 
 `"configList"` should contain a list of config objects. Each config object may consist of following fields:
 
-
-|     Field      | Required |                                                    Description                                                                     |     Type         |                         Example                         |
-|----------------|----------|------------------------------------------------------------------------------------------------------------------------------------|------------------|---------------------------------------------------------|
-| "resourceName" | Y        | Endpoint resource name. Should not contain special characters, must be unique in the scope of the resource prefix                  | string           | "hca_shared_devices_a"                                  |
-| "rdmaHcaMax"   | Y        | Maximum number of RDMA resources that can be provided by the device plugin resource                                                | Integer          | 1000                                                    |
-| "selectors"    | N        | A map of device selectors for filtering the devices. refer to [Device Selectors](#devices-selectors) section for more information  | json object      | selectors": {"vendors": ["15b3"],"deviceIDs": ["1017"]} |
-| "devices"      | N        | A list of devices names to be selected, same as "ifNames" selector                                                                 | `string` list    | ["ib0", "ib1"]                                          |
+| Field            | Required | Description                                                                                                                       |     Type         | Default value | Example                                                 |
+|------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------|------------------|---------------|---------------------------------------------------------|
+| "resourceName"   | Y        | Endpoint resource name. Should not contain special characters, must be unique in the scope of the resource prefix                 | string           | -             | "hca_shared_devices_a"                                  |
+| "resourcePrefix" | N        | Endpoint resource prefix. Should not contain special characters                                                                   | string           | "rdma"        | "example_prefix"                                        |
+| "rdmaHcaMax"     | Y        | Maximum number of RDMA resources that can be provided by the device plugin resource                                               | Integer          | -             | 1000                                                    |
+| "selectors"      | N        | A map of device selectors for filtering the devices. refer to [Device Selectors](#devices-selectors) section for more information | json object      | -             | selectors": {"vendors": ["15b3"],"deviceIDs": ["1017"]} |
+| "devices"        | N        | A list of devices names to be selected, same as "ifNames" selector                                                                | `string` list    | -             | ["ib0", "ib1"]                                          |
 
 Note: Either `selectors` or `devices` must be specified for a given resource, "selectors" is recommended.
 
 ## Devices Selectors
-The following selectors are used for filtering the desired devices.
 
+The following selectors are used for filtering the desired devices.
 
 |    Field    |                          Description                           |     Type      |         Example          |
 |-------------|----------------------------------------------------------------|---------------|--------------------------|
@@ -130,7 +134,10 @@ The following selectors are used for filtering the desired devices.
 [//]: # (The tables above generated using: https://ozh.github.io/ascii-tables/)
 
 ## Selectors Matching Process
-The device plugin filters the host devices based on the provided selectors, if there are any missing selectors, the device plugin ignores them. Device plugin performs logical OR between elements of a specific selector and logical AND is performed between selectors.
+
+The device plugin filters the host devices based on the provided selectors, if there are any missing selectors, the
+device plugin ignores them. Device plugin performs logical OR between elements of a specific selector and logical AND is
+performed between selectors.
 
 # RDMA shared device plugin deployment with node labels
 
@@ -139,7 +146,8 @@ RDMA shared device plugin should be deployed on nodes that:
 1. Have RDMA capable hardware
 2. RDMA kernel stack is loaded
 
-To allow proper node selection [Node Feature Discovery (NFD)](https://github.com/kubernetes-sigs/node-feature-discovery) can be used to discover the node capabilities, and expose them as node labels.
+To allow proper node selection [Node Feature Discovery (NFD)](https://github.com/kubernetes-sigs/node-feature-discovery)
+can be used to discover the node capabilities, and expose them as node labels.
 
 1. Deploy NFD, release `v0.6.0` or new newer
 
@@ -150,15 +158,18 @@ To allow proper node selection [Node Feature Discovery (NFD)](https://github.com
 ```
 
 2. Check the new labels added to the node
+
 ```
 # kubectl get nodes --show-labels
 ```
 
-RDMA device plugin can then be deployed on nodes with `feature.node.kubernetes.io/custom-rdma.available=true`, which indicates that the node is RDMA capable and RDMA modules are loaded.
+RDMA device plugin can then be deployed on nodes with `feature.node.kubernetes.io/custom-rdma.available=true`, which
+indicates that the node is RDMA capable and RDMA modules are loaded.
 
 # Docker image
-RDMA shared device plugin uses `alpine` base image by default. To build RDMA shared device plugin with
-another base image you need to pass `BASE_IMAGE` argument:
+
+RDMA shared device plugin uses `alpine` base image by default. To build RDMA shared device plugin with another base
+image you need to pass `BASE_IMAGE` argument:
 
 ```
 docker build -t k8s-rdma-shared-dev-plugin \

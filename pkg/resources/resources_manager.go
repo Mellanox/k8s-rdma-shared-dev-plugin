@@ -43,7 +43,7 @@ var (
 // resourceManager for plugin
 type resourceManager struct {
 	configFile             string
-	resourcePrefix         string
+	defaultResourcePrefix  string
 	socketSuffix           string
 	watchMode              bool
 	configList             []*types.UserConfig
@@ -62,12 +62,12 @@ func NewResourceManager() types.ResourceManager {
 		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 	}
 	return &resourceManager{
-		configFile:     configFilePath,
-		resourcePrefix: rdmaHcaResourcePrefix,
-		socketSuffix:   socketSuffix,
-		watchMode:      watcherMode,
-		netlinkManager: &netlinkManager{},
-		rds:            NewRdmaDeviceSpec(requiredRdmaDevices),
+		configFile:            configFilePath,
+		defaultResourcePrefix: rdmaHcaResourcePrefix,
+		socketSuffix:          socketSuffix,
+		watchMode:             watcherMode,
+		netlinkManager:        &netlinkManager{},
+		rds:                   NewRdmaDeviceSpec(requiredRdmaDevices),
 	}
 }
 
@@ -120,7 +120,7 @@ func (rm *resourceManager) ValidateConfigs() error {
 
 	for _, conf := range rm.configList {
 		// check if name contains acceptable characters
-		if !validResourceName(conf.ResourceName) {
+		if !validResourceNameOrPrefix(conf.ResourceName) {
 			return fmt.Errorf("error: resource name \"%s\" contains invalid characters", conf.ResourceName)
 		}
 		// check resource names are unique
@@ -128,6 +128,12 @@ func (rm *resourceManager) ValidateConfigs() error {
 		if ok {
 			// resource name already exist
 			return fmt.Errorf("error: resource name \"%s\" already exists", conf.ResourceName)
+		}
+		// If prefix is not configured - use the default one. Otherwise validate if it contains acceptable characters
+		if conf.ResourcePrefix == "" {
+			conf.ResourcePrefix = rm.defaultResourcePrefix
+		} else if !validResourceNameOrPrefix(conf.ResourcePrefix) {
+			return fmt.Errorf("error: resource prefix \"%s\" contains invalid characters", conf.ResourcePrefix)
 		}
 
 		if conf.RdmaHcaMax < 0 {
@@ -197,7 +203,7 @@ func (rm *resourceManager) InitServers() error {
 			log.Printf("Warning: no devices in device pool, creating empty resource server for %s", config.ResourceName)
 		}
 
-		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.resourcePrefix, rm.socketSuffix)
+		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.socketSuffix)
 		if err != nil {
 			return err
 		}
@@ -241,7 +247,7 @@ func (rm *resourceManager) RestartAllServers() error {
 	return nil
 }
 
-func validResourceName(name string) bool {
+func validResourceNameOrPrefix(name string) bool {
 	// name regex
 	var validString = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
 	return validString.MatchString(name)

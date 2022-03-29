@@ -106,7 +106,7 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 }
 
 // newResourceServer returns an initialized server
-func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool, resourcePrefix,
+func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool,
 	socketSuffix string) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 
@@ -114,6 +114,9 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 
 	if config.RdmaHcaMax < 0 {
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
+	}
+	if config.ResourcePrefix == "" {
+		return nil, fmt.Errorf("error: Empty resourcePrefix")
 	}
 
 	deviceSpec := getDevicesSpec(devices)
@@ -138,7 +141,7 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
 
 	return &resourceServer{
-		resourceName:   fmt.Sprintf("%s/%s", resourcePrefix, config.ResourceName),
+		resourceName:   fmt.Sprintf("%s/%s", config.ResourcePrefix, config.ResourceName),
 		socketName:     socketName,
 		socketPath:     filepath.Join(sockDir, socketName),
 		watchMode:      watcherMode,

@@ -414,9 +414,10 @@ var _ = Describe("ResourcesManger", func() {
 			rm := &resourceManager{}
 
 			configlist = append(configlist, &types.UserConfig{
-				ResourceName: "test_config",
-				RdmaHcaMax:   100,
-				Devices:      []string{"ib0"}})
+				ResourceName:   "test_config",
+				ResourcePrefix: "test_prefix",
+				RdmaHcaMax:     100,
+				Devices:        []string{"ib0"}})
 
 			rm.configList = configlist
 			err := rm.InitServers()
