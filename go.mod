@@ -17,7 +17,7 @@ require (
 	golang.org/x/sys v0.0.0 // indirect
 	google.golang.org/genproto v0.0.0 // indirect
 	google.golang.org/grpc v1.26.0
-	gopkg.in/yaml.v2 v2.2.7 // indirect
+	gopkg.in/yaml.v2 v2.2.8 // indirect
 	k8s.io/kubelet v0.17.2
 )
 
