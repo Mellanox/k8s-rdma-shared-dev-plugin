@@ -16,6 +16,8 @@ type FakeFilesystem struct {
 }
 
 // Use function creates entire files structure and returns a function to tear it down. Example usage: defer fs.Use()()
+//
+//nolint:gomnd
 func (fs *FakeFilesystem) Use() func() {
 	// create the new fake fs root dir in /tmp/sriov...
 	tmpDir, err := ioutil.TempDir("", "k8s-rdma-shared-dev-plugin-")
@@ -25,13 +27,13 @@ func (fs *FakeFilesystem) Use() func() {
 	fs.RootDir = tmpDir
 
 	for _, dir := range fs.Dirs {
-		osErr := os.MkdirAll(path.Join(fs.RootDir, dir), 0755)
+		osErr := os.MkdirAll(path.Join(fs.RootDir, dir), 0700)
 		if osErr != nil {
 			panic(fmt.Errorf("error creating fake directory: %s", osErr.Error()))
 		}
 	}
 	for filename, body := range fs.Files {
-		ioErr := ioutil.WriteFile(path.Join(fs.RootDir, filename), body, 0644)
+		ioErr := os.WriteFile(path.Join(fs.RootDir, filename), body, 0600)
 		if ioErr != nil {
 			panic(fmt.Errorf("error creating fake file: %s", ioErr.Error()))
 		}
@@ -42,7 +44,7 @@ func (fs *FakeFilesystem) Use() func() {
 			panic(fmt.Errorf("error creating fake symlink: %s", osErr.Error()))
 		}
 	}
-	err = os.MkdirAll(path.Join(fs.RootDir, "usr/share/hwdata"), 0755)
+	err = os.MkdirAll(path.Join(fs.RootDir, "usr/share/hwdata"), 0700)
 	if err != nil {
 		panic(fmt.Errorf("error creating fake directory: %s", err.Error()))
 	}
@@ -50,11 +52,11 @@ func (fs *FakeFilesystem) Use() func() {
 	// TODO: Remove writing pci.ids file once ghw is mocked
 	// This is to fix the CI failure where ghw lib fails to
 	// unzip pci.ids file downloaded from internet.
-	pciData, err := ioutil.ReadFile("/usr/share/hwdata/pci.ids")
+	pciData, err := os.ReadFile("/usr/share/hwdata/pci.ids")
 	if err != nil {
 		panic(fmt.Errorf("error reading file: %s", err.Error()))
 	}
-	err = ioutil.WriteFile(path.Join(fs.RootDir, "usr/share/hwdata/pci.ids"), pciData, 0644)
+	err = os.WriteFile(path.Join(fs.RootDir, "usr/share/hwdata/pci.ids"), pciData, 0600)
 	if err != nil {
 		panic(fmt.Errorf("error creating fake file: %s", err.Error()))
 	}

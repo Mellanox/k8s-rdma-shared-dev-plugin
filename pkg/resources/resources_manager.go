@@ -3,8 +3,8 @@ package resources
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"regexp"
 	"strconv"
 	"time"
@@ -74,7 +74,7 @@ func NewResourceManager() types.ResourceManager {
 // ReadConfig to read configs
 func (rm *resourceManager) ReadConfig() error {
 	log.Println("Reading", rm.configFile)
-	raw, err := ioutil.ReadFile(rm.configFile)
+	raw, err := os.ReadFile(rm.configFile)
 	if err != nil {
 		return err
 	}

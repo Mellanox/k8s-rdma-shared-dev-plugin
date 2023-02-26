@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -72,7 +71,7 @@ func GetNetNames(pciAddr string) ([]string, error) {
 		return nil, fmt.Errorf("no net directory under pci device %s: %q", pciAddr, err)
 	}
 
-	fInfos, err := ioutil.ReadDir(netDir)
+	fInfos, err := os.ReadDir(netDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read net directory %s: %q", netDir, err)
 	}
