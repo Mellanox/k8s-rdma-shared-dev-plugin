@@ -1,0 +1,8 @@
+# Files
+*.cover
+
+# Folders
+.gopath/
+.idea/
+bin/
+build/
