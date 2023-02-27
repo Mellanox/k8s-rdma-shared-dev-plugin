@@ -25,13 +25,11 @@ linters-settings:
     min-complexity: 30
   goimports:
     local-prefixes: github.com/Mellanox/k8s-rdma-shared-dev-plugin
-  golint:
-    min-confidence: 0
   gomnd:
     settings:
       mnd:
         # don't include the "operation" and "assign"
-        checks: argument,case,condition,return
+        checks: [argument,case,condition,return]
   govet:
     check-shadowing: true
     settings:
@@ -55,11 +53,11 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
     - depguard
     - dogsled
     - dupl
     - errcheck
+    - exportloopref
     - funlen
     - gochecknoinits
     - goconst
@@ -67,7 +65,6 @@ linters:
     - gocognit
     - gofmt
     - goimports
-    - golint 
     - gomnd
     - goprintffuncname
     - gosec
@@ -78,16 +75,14 @@ linters:
     - misspell
     - nakedret
     - prealloc
+    - revive
     - rowserrcheck
-    - scopelint
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:

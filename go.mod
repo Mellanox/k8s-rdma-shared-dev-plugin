@@ -11,7 +11,7 @@ require (
 	github.com/pkg/errors v0.8.0
 	github.com/stretchr/testify v1.4.0
 	github.com/vishvananda/netlink v1.1.0
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
 	google.golang.org/grpc v1.26.0
 	k8s.io/kubelet v0.17.2
 )
