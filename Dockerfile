@@ -1,18 +1,17 @@
-ARG BASE_IMAGE=alpine:3.15.4
 FROM golang:alpine as builder
 
-ADD . /usr/src/k8s-rdma-shared-dp
+COPY . /usr/src/k8s-rdma-shared-dp
 
 ENV HTTP_PROXY $http_proxy
 ENV HTTPS_PROXY $https_proxy
 
-RUN apk add --update --virtual build-dependencies build-base linux-headers git && \
-    cd /usr/src/k8s-rdma-shared-dp && \
-    make clean && \
+RUN apk add --no-cache --virtual build-base=0.5-r3 linux-headers=5.19.5-r0
+WORKDIR /usr/src/k8s-rdma-shared-dp
+RUN make clean && \
     make build
 
-FROM ${BASE_IMAGE}
-RUN apk add kmod hwdata-pci
+FROM alpine:3.18.2
+RUN apk add --no-cache kmod=30-r3 hwdata-pci=0.370-r0
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"

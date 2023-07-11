@@ -18,14 +18,14 @@ jobs:
         run: make lint
   test:
     name: test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
     steps:
       - name: Set up Go 1.x
         uses: actions/setup-go@v3
         with:
-          go-version: '1.18.x'
+          go-version: '1.20.x'
       - name: checkout
         uses: actions/checkout@v3
       - name: install hwdata -yq
@@ -34,14 +34,14 @@ jobs:
         run: make test-coverage
   build:
     name: build
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     permissions:
       contents: read
     steps:
       - name: Set up Go 1.x
         uses: actions/setup-go@v3
         with:
-          go-version: '1.18.x'
+          go-version: '1.20.x'
       - name: checkout
         uses: actions/checkout@v3
       - name: build
