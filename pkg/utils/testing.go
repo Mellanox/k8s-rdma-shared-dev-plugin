@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
 )
@@ -20,7 +19,7 @@ type FakeFilesystem struct {
 //nolint:gomnd
 func (fs *FakeFilesystem) Use() func() {
 	// create the new fake fs root dir in /tmp/sriov...
-	tmpDir, err := ioutil.TempDir("", "k8s-rdma-shared-dev-plugin-")
+	tmpDir, err := os.MkdirTemp("", "k8s-rdma-shared-dev-plugin-")
 	if err != nil {
 		panic(fmt.Errorf("error creating fake root dir: %s", err.Error()))
 	}
