@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: rdma-shared-dp-ds
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: k8s-rdma-shared-dp-ds
+          volumeMounts:
+            - name: dynamic-cdi
+              mountPath: /var/run/cdi
+      volumes:
+        - name: dynamic-cdi
+          hostPath:
+            path: /var/run/cdi
+            type: DirectoryOrCreate

@@ -1,3 +1,21 @@
+/*----------------------------------------------------
+
+  2023 NVIDIA CORPORATION & AFFILIATES
+
+  Licensed under the Apache License, Version 2.0 (the License);
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an AS IS BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+----------------------------------------------------*/
+
 package resources
 
 import (
@@ -16,13 +34,16 @@ import (
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 
+	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 )
 
 const (
 	// Local use
-	cDialTimeout  = 5 * time.Second
-	watchWaitTime = 5 * time.Second
+	cDialTimeout      = 5 * time.Second
+	watchWaitTime     = 5 * time.Second
+	cdiResourcePrefix = "nvidia.com"
+	cdiResourceKind   = "net-rdma"
 )
 
 type resourcesServerPort struct {
@@ -40,9 +61,13 @@ type resourceServer struct {
 	rsConnector    types.ResourceServerPort
 	rdmaHcaMax     int
 	// Mutex protects devs and deviceSpec
-	mutex      sync.RWMutex
-	devs       []*pluginapi.Device
-	deviceSpec []*pluginapi.DeviceSpec
+	mutex           sync.RWMutex
+	devs            []*pluginapi.Device
+	deviceSpec      []*pluginapi.DeviceSpec
+	pciDevices      []types.PciNetDevice
+	useCdi          bool
+	cdi             cdi.CDI
+	cdiResourceName string
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -98,7 +123,7 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 
 // newResourceServer returns an initialized server
 func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool,
-	socketSuffix string) (types.ResourceServer, error) {
+	socketSuffix string, useCdi bool) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 
 	sockDir := activeSockDir
@@ -132,17 +157,21 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
 
 	return &resourceServer{
-		resourceName:   fmt.Sprintf("%s/%s", config.ResourcePrefix, config.ResourceName),
-		socketName:     socketName,
-		socketPath:     filepath.Join(sockDir, socketName),
-		watchMode:      watcherMode,
-		devs:           devs,
-		deviceSpec:     deviceSpec,
-		stopWatcher:    make(chan bool),
-		updateResource: make(chan bool, 1),
-		health:         make(chan *pluginapi.Device),
-		rsConnector:    &resourcesServerPort{},
-		rdmaHcaMax:     config.RdmaHcaMax,
+		resourceName:    fmt.Sprintf("%s/%s", config.ResourcePrefix, config.ResourceName),
+		socketName:      socketName,
+		socketPath:      filepath.Join(sockDir, socketName),
+		watchMode:       watcherMode,
+		devs:            devs,
+		deviceSpec:      deviceSpec,
+		stopWatcher:     make(chan bool),
+		updateResource:  make(chan bool, 1),
+		health:          make(chan *pluginapi.Device),
+		rsConnector:     &resourcesServerPort{},
+		rdmaHcaMax:      config.RdmaHcaMax,
+		pciDevices:      devices,
+		useCdi:          useCdi,
+		cdi:             cdi.New(),
+		cdiResourceName: config.ResourceName,
 	}, nil
 }
 
@@ -275,6 +304,14 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 		return err
 	}
 
+	rs.mutex.RLock()
+	err := rs.updateCDISpec()
+	rs.mutex.RUnlock()
+	if err != nil {
+		log.Printf("cannot update CDI specs: %v", err)
+		return err
+	}
+
 	for {
 		select {
 		case <-s.Context().Done():
@@ -291,8 +328,26 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 				rs.updateResource <- true
 				return err
 			}
+			err := rs.updateCDISpec()
+			if err != nil {
+				log.Printf("cannot update CDI specs: %v", err)
+				return err
+			}
 		}
 	}
+}
+
+func (rs *resourceServer) updateCDISpec() error {
+	// check if CDI mode is enabled
+	if !rs.useCdi {
+		return nil
+	}
+	err := rs.cdi.CreateCDISpec(cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName, rs.pciDevices)
+	if err != nil {
+		log.Printf("updateCDISpec(): error creating CDI spec: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (rs *resourceServer) sendDevices(resp *pluginapi.ListAndWatchResponse,
@@ -320,8 +375,17 @@ func (rs *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateReq
 	ress := make([]*pluginapi.ContainerAllocateResponse, len(r.GetContainerRequests()))
 
 	for i := range r.GetContainerRequests() {
-		ress[i] = &pluginapi.ContainerAllocateResponse{
-			Devices: rs.deviceSpec,
+		ress[i] = &pluginapi.ContainerAllocateResponse{}
+
+		if rs.useCdi {
+			var err error
+			ress[i].Annotations, err = rs.cdi.CreateContainerAnnotations(
+				rs.pciDevices, cdiResourcePrefix, cdiResourceKind)
+			if err != nil {
+				return nil, fmt.Errorf("cant create container annotation: %s", err)
+			}
+		} else {
+			ress[i].Devices = rs.deviceSpec
 		}
 	}
 

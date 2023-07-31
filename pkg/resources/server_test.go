@@ -1,3 +1,21 @@
+/*----------------------------------------------------
+
+  2023 NVIDIA CORPORATION & AFFILIATES
+
+  Licensed under the Apache License, Version 2.0 (the License);
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an AS IS BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+
+----------------------------------------------------*/
+
 package resources
 
 import (
@@ -8,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	cdiMocks "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi/mocks"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types/mocks"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
@@ -57,7 +76,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -72,7 +91,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -91,7 +110,7 @@ var _ = Describe("resourceServer tests", func() {
 			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
 			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
 			deviceList := []types.PciNetDevice{fakePciDevice}
-			obj, err := newResourceServer(conf, deviceList, true, "socket")
+			obj, err := newResourceServer(conf, deviceList, true, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -106,7 +125,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -121,7 +140,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, false, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -131,7 +150,7 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("server with plugin with invalid max number of resources", func() {
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: -100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 			Expect(err).To(HaveOccurred())
 			Expect(obj).To(BeNil())
 		})
@@ -364,7 +383,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{RdmaHcaMax: 100, ResourcePrefix: "rdma", ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake", false)
 			Expect(err).ToNot(HaveOccurred())
 
 			rs := obj.(*resourceServer)
@@ -388,6 +407,31 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(len(s.devices)).To(Equal(100))
 			Expect(s.devices[5].Health).To(Equal(pluginapi.Unhealthy))
 		})
+		It("Ensure that CDI spec is updated on ListAndWatch call", func() {
+			fs := utils.FakeFilesystem{
+				Dirs:     []string{fakeNetDevicePath},
+				Symlinks: map[string]string{path.Join(fakeNetDevicePath, "device"): "../../../0000:02:00.0"},
+			}
+			defer fs.Use()()
+			conf := &types.UserConfig{RdmaHcaMax: 1, ResourcePrefix: "rdma", ResourceName: "fake"}
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "fake", true)
+			Expect(err).ToNot(HaveOccurred())
+
+			cdi := &cdiMocks.CDI{}
+			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			rs := obj.(*resourceServer)
+			rs.cdi = cdi
+
+			ctx, cancel := context.WithCancel(context.Background())
+			s := &devPluginListAndWatchServerMock{}
+			s.SetContext(ctx)
+
+			cancel()
+
+			err = rs.ListAndWatch(nil, s)
+			cdi.AssertCalled(GinkgoT(), "CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			Expect(err).ToNot(HaveOccurred())
+		})
 		It("Stop ListAndWatch when stream is closed", func() {
 			rs := resourceServer{resourceName: "fake", socketName: "fake.sock"}
 			s := &devPluginListAndWatchServerMock{}
@@ -409,6 +453,18 @@ var _ = Describe("resourceServer tests", func() {
 			res, err := rs.Allocate(context.TODO(), req)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(len(res.ContainerResponses)).To(Equal(2))
+		})
+		It("Allocate calls CDI when configured", func() {
+			rs := resourceServer{resourceName: "fake", socketName: "fake.sock", useCdi: true}
+			req := &pluginapi.AllocateRequest{
+				ContainerRequests: []*pluginapi.ContainerAllocateRequest{nil, nil},
+			}
+			cdi := &cdiMocks.CDI{}
+			cdi.On("CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+			rs.cdi = cdi
+			_, err := rs.Allocate(context.TODO(), req)
+			Expect(err).ToNot(HaveOccurred())
+			cdi.AssertCalled(GinkgoT(), "CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything)
 		})
 	})
 	Context("GetInfo", func() {
@@ -500,7 +556,7 @@ var _ = Describe("resourceServer tests", func() {
 			}()
 
 			conf := &types.UserConfig{ResourceName: "fake_test", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 
@@ -564,7 +620,7 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = fs.RootDir
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket", false)
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -593,7 +649,7 @@ var _ = Describe("resourceServer tests", func() {
 				activeSockDir = fs.RootDir
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+				obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -623,7 +679,7 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = fs.RootDir
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket")
+				obj, err := newResourceServer(conf, fakeDeviceList, false, "socket", false)
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -652,7 +708,7 @@ var _ = Describe("resourceServer tests", func() {
 	DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
 			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket")
+			obj, err := newResourceServer(conf, fakeDeviceList, true, "socket", false)
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 
