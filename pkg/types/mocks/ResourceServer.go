@@ -146,3 +146,8 @@ func (_m *ResourceServer) UpdateDevices(_a0 []types.PciNetDevice) {
 func (_m *ResourceServer) Watch() {
 	_m.Called()
 }
+
+func (_m *ResourceServer) GetPreferredAllocation(
+	_a0 context.Context, _a1 *v1beta1.PreferredAllocationRequest) (*v1beta1.PreferredAllocationResponse, error) {
+	return nil, nil
+}

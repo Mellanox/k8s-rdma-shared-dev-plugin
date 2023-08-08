@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"google.golang.org/grpc"
+	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
@@ -52,7 +53,7 @@ func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error
 	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
 	defer timeoutCancel()
 	go func() {
-		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithInsecure(),
+		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 				return net.Dial("unix", addr)
 			}),
