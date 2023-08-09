@@ -1,8 +1,5 @@
 name: "push an image on merge to master"
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
-
 on:
   push:
     branches:
@@ -12,6 +9,10 @@ jobs:
     name: image push amd64
     runs-on: ubuntu-22.04
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: check out the repo
         uses: actions/checkout@v3
 
@@ -32,13 +33,17 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE_NAME }}:latest-amd64
+            ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-amd64
           file: ./Dockerfile
 
   build-and-push-arm64-k8s-rdma-shared-dev-plugin:
     name: image push arm64
     runs-on: ubuntu-22.04
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: check out the repo
         uses: actions/checkout@v3
 
@@ -59,13 +64,17 @@ jobs:
           push: true
           platforms: linux/arm64
           tags: |
-            ${{ env.IMAGE_NAME }}:latest-arm64
+            ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-arm64
           file: ./Dockerfile
 
   build-and-push-ppc64le-k8s-rdma-shared-dev-plugin:
     name: image push ppc64le
     runs-on: ubuntu-22.04
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: check out the repo
         uses: actions/checkout@v3
 
@@ -86,13 +95,17 @@ jobs:
           push: true
           platforms: linux/ppc64le
           tags: |
-            ${{ env.IMAGE_NAME }}:latest-ppc64le
+            ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-ppc64le
           file: ./Dockerfile
 
   push-manifest:
     runs-on: ubuntu-22.04
     needs: [build-and-push-amd64-k8s-rdma-shared-dev-plugin,build-and-push-arm64-k8s-rdma-shared-dev-plugin,build-and-push-ppc64le-k8s-rdma-shared-dev-plugin]
     steps:
+    - name: Set repository as lower-case output variable
+      id: repo_name
+      run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
     - name: set up Docker Buildx
       uses: docker/setup-buildx-action@v2
 
@@ -105,7 +118,7 @@ jobs:
 
     - name: Create manifest for multi-arch images
       run: |
-        docker buildx imagetools create -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:sha-${{ github.sha }} \
-        ${{ env.IMAGE_NAME }}:latest-amd64 \
-        ${{ env.IMAGE_NAME }}:latest-arm64 \
-        ${{ env.IMAGE_NAME }}:latest-ppc64le
+        docker buildx imagetools create -t ghcr.io/${{ steps.repo_name.outputs.repository }}:latest -t ghcr.io/${{ steps.repo_name.outputs.repository }}:sha-${{ github.sha }} \
+        ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-amd64 \
+        ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-arm64 \
+        ghcr.io/${{ steps.repo_name.outputs.repository }}:latest-ppc64le
