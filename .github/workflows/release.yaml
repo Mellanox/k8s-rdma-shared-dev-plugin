@@ -5,9 +5,6 @@
 
 name: Publish Docker image
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
-
 on:
   push:
     tags:
@@ -18,6 +15,9 @@ jobs:
     name: Push amd64 image to ghcr.io
     runs-on: ubuntu-latest
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
       - name: Check out the repo
         uses: actions/checkout@v3
 
@@ -35,7 +35,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ steps.repo_name.outputs.repository }}
           flavor: |
             latest=false
           tags: |
@@ -55,6 +55,10 @@ jobs:
     name: Push arm64 image to ghcr.io
     runs-on: ubuntu-latest
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: Check out the repo
         uses: actions/checkout@v3
 
@@ -72,7 +76,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ steps.repo_name.outputs.repository }}
           flavor: |
             latest=false
           tags: |
@@ -92,6 +96,10 @@ jobs:
     name: Push ppc64le image to ghcr.io
     runs-on: ubuntu-latest
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: Check out the repo
         uses: actions/checkout@v3
 
@@ -109,7 +117,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ steps.repo_name.outputs.repository }}
           flavor: |
             latest=false
           tags: |
@@ -129,6 +137,10 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [build-and-push-amd64,build-and-push-arm64,build-and-push-ppc64le]
     steps:
+      - name: Set repository as lower-case output variable
+        id: repo_name
+        run: echo ::set-output name=repository::$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
+
       - name: set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
@@ -136,7 +148,7 @@ jobs:
         id: docker_meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ghcr.io/${{ steps.repo_name.outputs.repository }}
           flavor: |
             latest=false
           tags: |
