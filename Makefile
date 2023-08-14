@@ -4,16 +4,10 @@ PACKAGE=k8s-rdma-shared-dev-plugin
 ORG_PATH=github.com/Mellanox
 REPO_PATH=$(ORG_PATH)/$(PACKAGE)
 BINDIR=$(CURDIR)/bin
-GOPATH=$(CURDIR)/.gopath
-GOBIN =$(CURDIR)/bin
 BUILDDIR=$(CURDIR)/build
-BASE=$(GOPATH)/src/$(REPO_PATH)
 GOFILES=$(shell find . -name *.go | grep -vE "(\/vendor\/)|(_test.go)")
-PKGS=$(or $(PKG),$(shell cd $(BASE) && env GOPATH=$(GOPATH) $(GO) list ./... | grep -v "^$(PACKAGE)/vendor/"))
-TESTPKGS = $(shell env GOPATH=$(GOPATH) $(GO) list -f '{{ if or .TestGoFiles .XTestGoFiles }}{{ .ImportPath }}{{ end }}' $(PKGS))
-
-export GOPATH
-export GOBIN
+PKGS=$(or $(PKG),$(shell cd $(CURDIR) && $(GO) list ./... | grep -v "^$(PACKAGE)/vendor/"))
+TESTPKGS = $(shell $(GO) list -f '{{ if or .TestGoFiles .XTestGoFiles }}{{ .ImportPath }}{{ end }}' $(PKGS))
 
 # Version
 VERSION?=master
@@ -23,7 +17,7 @@ LDFLAGS="-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE
 
 # Docker
 IMAGE_BUILDER?=@docker
-IMAGEDIR=$(BASE)/images
+IMAGEDIR=$(CURDIR)/images
 DOCKERFILE?=$(CURDIR)/Dockerfile
 TAG?=mellanox/k8s-rdma-shared-dev-plugin
 IMAGE_BUILD_OPTS?=
@@ -40,7 +34,7 @@ IMAGE_BUILD_OPTS += $(DOCKERARGS)
 
 # Go tools
 GO      = go
-GOLANGCI_LINT = $(GOBIN)/golangci-lint
+GOLANGCI_LINT = $(BINDIR)/golangci-lint
 # golangci-lint version should be updated periodically
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
@@ -51,45 +45,37 @@ Q = $(if $(filter 1,$V),,@)
 .PHONY: all
 all: lint build test
 
-$(BASE): ; $(info  setting GOPATH...)
-	@mkdir -p $(dir $@)
-	@ln -sf $(CURDIR) $@
-
-$(GOBIN):
+$(BINDIR):
 	@mkdir -p $@
 
-$(BUILDDIR): | $(BASE) ; $(info Creating build directory...)
-	@cd $(BASE) && mkdir -p $@
+$(BUILDDIR): | $(info Creating build directory...)
+	@mkdir -p $@
 
 build: $(BUILDDIR)/$(BINARY_NAME) ; $(info Building $(BINARY_NAME)...) ## Build executable file
 	$(info Done!)
 
 $(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
-	@cd $(BASE)/cmd/$(BINARY_NAME) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
+	@cd $(CURDIR)/cmd/$(BINARY_NAME) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
 
 # Tools
-$(GOLANGCI_LINT): | $(BASE) ; $(info  building golangci-lint...)
-	$Q curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(GOBIN) $(GOLANGCI_LINT_VER)
+$(GOLANGCI_LINT): | $(BINDIR) ; $(info  installing golangci-lint...)
+	$Q GOBIN=$(BINDIR) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VER)
 
-GOVERALLS = $(GOBIN)/goveralls
-$(GOBIN)/goveralls: | $(BASE) ; $(info  building goveralls...)
-	$Q go get github.com/mattn/goveralls
+GOVERALLS = $(BINDIR)/goveralls
+$(GOVERALLS): | $(BINDIR) ; $(info  installing goveralls...)
+	$Q GOBIN=$(BINDIR) go install github.com/mattn/goveralls@v0.0.12
 
 HADOLINT_TOOL = $(BINDIR)/hadolint
-$(HADOLINT_TOOL): | $(BASE) ; $(info  installing hadolint...)
+$(HADOLINT_TOOL): | $(BINDIR) ; $(info  installing hadolint...)
 	$(call wget-install-tool,$(HADOLINT_TOOL),"https://github.com/hadolint/hadolint/releases/download/v2.12.1-beta/hadolint-Linux-x86_64")
 
 # Tests
 .PHONY: lint
-lint: | $(BASE) $(GOLANGCI_LINT) ; $(info  running golangci-lint...) @ ## Run golangci-lint
-	$Q mkdir -p $(BASE)/test
-	$Q cd $(BASE) && ret=0 && \
-		test -z "$$($(GOLANGCI_LINT) run | tee $(BASE)/test/lint.out)" || ret=1 ; \
-		cat $(BASE)/test/lint.out ; rm -rf $(BASE)/test ; \
-	 exit $$ret
+lint: | $(GOLANGCI_LINT) ; $(info  running golangci-lint...) @ ## Run golangci-lint
+	$Q $(GOLANGCI_LINT) run --timeout=10m
 
 .PHONY: hadolint
-hadolint: $(BASE) $(HADOLINT_TOOL); $(info  running hadolint...) @ ## Run hadolint
+hadolint: $(HADOLINT_TOOL); $(info  running hadolint...) @ ## Run hadolint
 	$Q $(HADOLINT_TOOL) Dockerfile
 
 TEST_TARGETS := test-default test-bench test-short test-verbose test-race
@@ -100,23 +86,23 @@ test-verbose: ARGS=-v            ## Run tests in verbose mode with coverage repo
 test-race:    ARGS=-race         ## Run tests with race detector
 $(TEST_TARGETS): NAME=$(MAKECMDGOALS:test-%=%)
 $(TEST_TARGETS): test
-check test tests: | $(BASE) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests
-	$Q cd $(BASE) && $(GO) test -timeout $(TIMEOUT)s $(ARGS) $(TESTPKGS)
+check test tests: | ; $(info  running $(NAME:%=% )tests...) @ ## Run tests
+	$Q $(GO) test -timeout $(TIMEOUT)s $(ARGS) $(TESTPKGS)
 
-test-xml: | $(BASE) $(GO2XUNIT) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests with xUnit output
-	$Q cd $(BASE) && 2>&1 $(GO) test -timeout 20s -v $(TESTPKGS) | tee test/tests.output
+test-xml: | $(GO2XUNIT) ; $(info  running $(NAME:%=% )tests...) @ ## Run tests with xUnit output
+	$Q 2>&1 $(GO) test -timeout 20s -v $(TESTPKGS) | tee test/tests.output
 	$(GO2XUNIT) -fail -input test/tests.output -output test/tests.xml
 
 COVERAGE_MODE = count
 .PHONY: test-coverage test-coverage-tools
 test-coverage-tools: | $(GOVERALLS)
 test-coverage: COVERAGE_DIR := $(CURDIR)/test
-test-coverage: test-coverage-tools | $(BASE) ; $(info  running coverage tests...) @ ## Run coverage tests
-		$Q cd $(BASE); $(GO) test -covermode=$(COVERAGE_MODE) -coverprofile=k8s-rdma-shared-dev-plugin.cover ./...
+test-coverage: test-coverage-tools | ; $(info  running coverage tests...) @ ## Run coverage tests
+		$Q $(GO) test -covermode=$(COVERAGE_MODE) -coverprofile=k8s-rdma-shared-dev-plugin.cover ./...
 
 # Container image
 .PHONY: image ubi-image
-image: | $(BASE) ; $(info Building Docker image...)  ## Build conatiner image
+image: | ; $(info Building Docker image...)  ## Build conatiner image
 	$(IMAGE_BUILDER) build --progress=plain -t $(TAG) -f $(DOCKERFILE)  $(CURDIR) $(IMAGE_BUILD_OPTS)
 
 ubi-image: DOCKERFILE=$(CURDIR)/Dockerfile.ubi
@@ -127,8 +113,8 @@ ubi-image: image       ## Build UBI-based container image
 
 .PHONY: clean
 clean: ; $(info  Cleaning...)	 ## Cleanup everything
-	@rm -rf $(GOPATH)
 	@rm -rf $(BUILDDIR)
+	@rm -rf $(BINDIR)
 	@rm -rf  test
 
 .PHONY: help
