@@ -34,7 +34,6 @@ type resourceServer struct {
 	watchMode      bool
 	socketName     string
 	socketPath     string
-	stop           chan interface{}
 	stopWatcher    chan bool
 	updateResource chan bool
 	health         chan *pluginapi.Device
@@ -84,26 +83,17 @@ func (rsc *resourcesServerPort) Register(client pluginapi.RegistrationClient, re
 func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
 	var c *grpc.ClientConn
 	var err error
-	connChannel := make(chan interface{})
 
-	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
+	ctx, timeoutCancel := context.WithTimeout(context.Background(), timeout)
 	defer timeoutCancel()
-	go func() {
-		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-				return net.Dial("unix", addr)
-			}),
-		)
-		connChannel <- "done"
-	}()
+	c, err = grpc.DialContext(
+		ctx, "unix://"+unixSocketPath, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("timout while trying to connect %s", unixSocketPath)
-
-	case <-connChannel:
-		return c, err
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect %s, %w", unixSocketPath, err)
 	}
+
+	return c, nil
 }
 
 // newResourceServer returns an initialized server
@@ -148,7 +138,6 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 		watchMode:      watcherMode,
 		devs:           devs,
 		deviceSpec:     deviceSpec,
-		stop:           make(chan interface{}),
 		stopWatcher:    make(chan bool),
 		updateResource: make(chan bool, 1),
 		health:         make(chan *pluginapi.Device),
@@ -207,12 +196,11 @@ func (rs *resourceServer) Stop() error {
 		return nil
 	}
 
-	// Send terminate signal to ListAndWatch()
-	rs.stop <- true
 	if !rs.watchMode {
 		rs.stopWatcher <- true
 	}
 
+	// Note: stopping RPC server will cancel any outstanding ListAndWatch() calls
 	rs.rsConnector.Stop()
 	rs.rsConnector.DeleteServer()
 
@@ -228,9 +216,6 @@ func (rs *resourceServer) Restart() error {
 
 	rs.rsConnector.Stop()
 	rs.rsConnector.DeleteServer()
-
-	// Send terminate signal to ListAndWatch()
-	rs.stop <- true
 
 	return rs.Start()
 }
@@ -282,6 +267,7 @@ func (rs *resourceServer) register() error {
 
 // ListAndWatch lists devices and update that list according to the health status
 func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	log.Printf("ListAndWatch called by kubelet for: %s", rs.resourceName)
 	resp := new(pluginapi.ListAndWatchResponse)
 
 	// Send initial list of devices
@@ -293,8 +279,6 @@ func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlu
 		select {
 		case <-s.Context().Done():
 			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
-			return nil
-		case <-rs.stop:
 			return nil
 		case d := <-rs.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
@@ -418,12 +402,11 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	}
 
 	rs.deviceSpec = deviceSpec
+	needUpdate = true
 
 	// In case no RDMA resource report 0 resources
 	if len(rs.deviceSpec) == 0 {
 		rs.devs = []*pluginapi.Device{}
-		needUpdate = true
-
 		return
 	}
 
@@ -440,8 +423,6 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 		}
 		rs.devs = devs
 	}
-
-	needUpdate = true
 }
 
 func (rs *resourceServer) GetPreferredAllocation(
