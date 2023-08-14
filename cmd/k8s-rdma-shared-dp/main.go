@@ -26,8 +26,11 @@ func main() {
 
 	// add version flag
 	versionOpt := false
+	var configFilePath string
 	flag.BoolVar(&versionOpt, "version", false, "Show application version")
 	flag.BoolVar(&versionOpt, "v", false, "Show application version")
+	flag.StringVar(
+		&configFilePath, "config-file", resources.DefaultConfigFilePath, "path to device plugin config file")
 	flag.Parse()
 	if versionOpt {
 		fmt.Printf("%s\n", printVersionString())
@@ -36,7 +39,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager()
+	rm := resources.NewResourceManager(configFilePath)
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {

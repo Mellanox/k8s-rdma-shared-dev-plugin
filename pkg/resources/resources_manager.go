@@ -18,7 +18,7 @@ import (
 
 const (
 	// General constants
-	configFilePath        = "/k8s-rdma-shared-dev-plugin/config.json"
+	DefaultConfigFilePath = "/k8s-rdma-shared-dev-plugin/config.json"
 	kubeEndPoint          = "kubelet.sock"
 	socketSuffix          = "sock"
 	rdmaHcaResourcePrefix = "rdma"
@@ -54,7 +54,7 @@ type resourceManager struct {
 	PeriodicUpdateInterval time.Duration
 }
 
-func NewResourceManager() types.ResourceManager {
+func NewResourceManager(configFile string) types.ResourceManager {
 	watcherMode := detectPluginWatchMode(activeSockDir)
 	if watcherMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
@@ -62,7 +62,7 @@ func NewResourceManager() types.ResourceManager {
 		fmt.Println("Using Deprecated Devie Plugin Registry Path")
 	}
 	return &resourceManager{
-		configFile:            configFilePath,
+		configFile:            configFile,
 		defaultResourcePrefix: rdmaHcaResourcePrefix,
 		socketSuffix:          socketSuffix,
 		watchMode:             watcherMode,
