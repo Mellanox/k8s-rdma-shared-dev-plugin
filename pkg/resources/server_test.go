@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"sync"
 	"time"
 
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
@@ -215,13 +216,7 @@ var _ = Describe("resourceServer tests", func() {
 			rs := resourceServer{
 				rsConnector: rsc,
 				watchMode:   true,
-				stop:        make(chan interface{}),
 			}
-
-			go func() {
-				stop := <-rs.stop
-				Expect(stop).To(BeTrue())
-			}()
 
 			err := rs.Stop()
 			Expect(err).ToNot(HaveOccurred())
@@ -239,13 +234,10 @@ var _ = Describe("resourceServer tests", func() {
 				rsConnector: rsc,
 				watchMode:   false,
 				stopWatcher: stopWatcher,
-				stop:        make(chan interface{}),
 			}
 			// Dummy listener to stopWatcher to not block the test and fail
 			go func() {
-				stop := <-rs.stop
-				Expect(stop).To(BeTrue())
-				stop = <-rs.stopWatcher
+				stop := <-rs.stopWatcher
 				Expect(stop).To(BeTrue())
 			}()
 
@@ -272,13 +264,7 @@ var _ = Describe("resourceServer tests", func() {
 			rs := resourceServer{
 				watchMode:   true,
 				rsConnector: rsc,
-				stop:        make(chan interface{}),
 			}
-
-			go func() {
-				stop := <-rs.stop
-				Expect(stop).To(BeTrue())
-			}()
 
 			err := rs.Restart()
 			Expect(err).To(HaveOccurred())
@@ -288,7 +274,6 @@ var _ = Describe("resourceServer tests", func() {
 		It("Failed to restart server with no grpc server", func() {
 			rs := resourceServer{
 				watchMode: true,
-				stop:      make(chan interface{}),
 			}
 
 			err := rs.Restart()
@@ -308,13 +293,7 @@ var _ = Describe("resourceServer tests", func() {
 			rs := resourceServer{
 				watchMode:   true,
 				rsConnector: rsc,
-				stop:        make(chan interface{}),
 			}
-
-			go func() {
-				stop := <-rs.stop
-				Expect(stop).To(BeTrue())
-			}()
 
 			err := rs.Restart()
 			Expect(err).To(HaveOccurred())
@@ -344,7 +323,6 @@ var _ = Describe("resourceServer tests", func() {
 				socketName:  fakeSocketName,
 				socketPath:  fakeSocketPath,
 				stopWatcher: make(chan bool),
-				stop:        make(chan interface{}),
 			}
 			go func() {
 				rs.stopWatcher <- true
@@ -368,12 +346,10 @@ var _ = Describe("resourceServer tests", func() {
 				rsConnector: rsc,
 				socketName:  fakeSocketName,
 				socketPath:  "fake deleted",
-				stop:        make(chan interface{}),
 				stopWatcher: make(chan bool),
 			}
 			go func() {
-				stop := <-rs.stop
-				Expect(stop).To(BeTrue())
+				time.Sleep(50 * time.Millisecond)
 				rs.stopWatcher <- true
 			}()
 			rs.Watch()
@@ -393,18 +369,19 @@ var _ = Describe("resourceServer tests", func() {
 
 			rs := obj.(*resourceServer)
 
-			rs.stop = make(chan interface{})
 			rs.health = make(chan *pluginapi.Device)
-			// Dummy sender
+			ctx, cancel := context.WithCancel(context.Background())
+			s := &devPluginListAndWatchServerMock{}
+			s.SetContext(ctx)
+
+			// report unhealthy devices then cancel context
 			go func() {
 				rs.health <- rs.devs[5]
 				// Make sure that health call before the stop
 				time.Sleep(1 * time.Millisecond)
-				rs.stop <- "stop"
+				cancel()
 			}()
 
-			s := &devPluginListAndWatchServerMock{}
-			s.SetContext(context.Background())
 			err = rs.ListAndWatch(nil, s)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(s.devices).To(Equal(rs.devs))
@@ -599,17 +576,11 @@ var _ = Describe("resourceServer tests", func() {
 				err = rs.Start()
 				Expect(err).NotTo(HaveOccurred())
 
-				go func() {
-					stop := <-rs.stop
-					Expect(stop).To(BeTrue())
-				}()
 				err = rs.Restart()
 				Expect(err).NotTo(HaveOccurred())
 
 				go func() {
-					stop := <-rs.stop
-					Expect(stop).To(BeTrue())
-					stop = <-rs.stopWatcher
+					stop := <-rs.stopWatcher
 					Expect(stop).To(BeTrue())
 				}()
 
@@ -635,20 +606,11 @@ var _ = Describe("resourceServer tests", func() {
 				err = registrationServer.registerPlugin()
 				Expect(err).NotTo(HaveOccurred())
 
-				go func() {
-					stop := <-rs.stop
-					Expect(stop).To(BeTrue())
-				}()
 				err = rs.Restart()
 				Expect(err).NotTo(HaveOccurred())
 
 				err = registrationServer.registerPlugin()
 				Expect(err).NotTo(HaveOccurred())
-
-				go func() {
-					stop := <-rs.stop
-					Expect(stop).To(BeTrue())
-				}()
 
 				err = rs.Stop()
 				Expect(err).NotTo(HaveOccurred())
@@ -673,13 +635,16 @@ var _ = Describe("resourceServer tests", func() {
 				err = rs.Start()
 				Expect(err).NotTo(HaveOccurred())
 				// run socket watcher in background as in real-life
-				go rs.Watch()
+				wg := sync.WaitGroup{}
+				wg.Add(1)
 				go func() {
-					stop := <-rs.stop
-					Expect(stop).To(BeTrue())
+					defer wg.Done()
+					rs.Watch()
 				}()
+
 				err = rs.Stop()
 				Expect(err).NotTo(HaveOccurred())
+				wg.Wait()
 			})
 		})
 	})

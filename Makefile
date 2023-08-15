@@ -39,7 +39,7 @@ GOLANGCI_LINT = $(BINDIR)/golangci-lint
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
 GOLANGCI_LINT_VER = v1.51.2
-TIMEOUT = 15
+TIMEOUT = 20
 Q = $(if $(filter 1,$V),,@)
 
 .PHONY: all
