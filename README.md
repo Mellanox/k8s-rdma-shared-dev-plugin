@@ -17,21 +17,16 @@ available at mellanox/k8s-rdma-shared-dev-plugin.
 Make sure to configure ib0 or appropriate IPoIB netdevice as the parent netdevice for creating overlay/virtual
 netdevices.
 
-**2.** Create ConfigMap
+**2.** Create ConfigMap and deploy Device Plugin
 
-Create config map to describe mode as "hca" mode. This is per node configuration.
-
-```
-kubectl create -f images/k8s-rdma-shared-dev-plugin-config-map.yaml
-```
-
-**3.** Deploy device plugin
+Deploy device plugin and create config map to describe mode as "hca" mode. This is per node configuration.
 
 ```
-kubectl create -f images/k8s-rdma-shared-dev-plugin-ds.yaml
+cd deployment/k8s/base
+kubectl apply -k .
 ```
 
-**4.** Create Test pod
+**3.** Create Test pod
 
 Create test pod which requests 1 vhca resource.
 
@@ -39,6 +34,12 @@ Create test pod which requests 1 vhca resource.
 kubectl create -f example/test-hca-pod.yaml
 ```
 
+### Deploy the device plugin with CDI support
+To use the device plugin with [CDI](https://github.com/cncf-tags/container-device-interface) support, do the following:
+```
+cd deployment/k8s/base/overlay
+kubectl apply -k .
+```
 # How to use device plugin for RDMA
 
 The device plugin can be used with macvlan for RDMA, to do the following steps:
