@@ -39,7 +39,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}},enable=${{ contains(github.ref, 'refs/tags/v') }}
+            type=ref,event=tag
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -80,7 +80,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}},enable=${{ contains(github.ref, 'refs/tags/v') }}
+            type=ref,event=tag
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -121,7 +121,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}},enable=${{ contains(github.ref, 'refs/tags/v') }}
+            type=ref,event=tag
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
@@ -152,7 +152,7 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}},enable=${{ contains(github.ref, 'refs/tags/v') }}
+            type=ref,event=tag
 
       - name: Log in to ghcr.io
         uses: docker/login-action@v2
