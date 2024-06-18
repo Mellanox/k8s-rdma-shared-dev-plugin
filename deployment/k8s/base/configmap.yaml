@@ -6,6 +6,7 @@ metadata:
 data:
   config.json: |
     {
+        "kubeletRootDir": "/var/lib/kubelet",
         "periodicUpdateInterval": 300,
         "configList": [{
              "resourceName": "hca_shared_devices_a",
