@@ -23,6 +23,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -68,6 +69,7 @@ type resourceServer struct {
 	useCdi          bool
 	cdi             cdi.CDI
 	cdiResourceName string
+	kubeletRootDir  string
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -123,10 +125,10 @@ func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duratio
 
 // newResourceServer returns an initialized server
 func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool,
-	socketSuffix string, useCdi bool) (types.ResourceServer, error) {
+	socketSuffix string, useCdi bool, kubeletRootDir string) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 
-	sockDir := activeSockDir
+	sockDir := path.Join(kubeletRootDir, "plugins_registry")
 
 	if config.RdmaHcaMax < 0 {
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
@@ -151,7 +153,7 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 	}
 
 	if !watcherMode {
-		sockDir = deprecatedSockDir
+		sockDir = path.Join(kubeletRootDir, "device-plugins")
 	}
 
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
@@ -172,6 +174,7 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 		useCdi:          useCdi,
 		cdi:             cdi.New(),
 		cdiResourceName: config.ResourceName,
+		kubeletRootDir:  kubeletRootDir,
 	}, nil
 }
 
@@ -277,7 +280,7 @@ func (rs *resourceServer) Watch() {
 
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (rs *resourceServer) register() error {
-	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
+	kubeletEndpoint := filepath.Join(rs.kubeletRootDir, "device-plugins", kubeEndPoint)
 	conn, err := rs.rsConnector.Dial(kubeletEndpoint, cDialTimeout)
 	if err != nil {
 		return err
@@ -424,7 +427,7 @@ func (rs *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequ
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              rs.resourceName,
-		Endpoint:          filepath.Join(activeSockDir, rs.socketName),
+		Endpoint:          filepath.Join(rs.kubeletRootDir, "plugins_registry", rs.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
