@@ -55,7 +55,7 @@ build: $(BUILDDIR)/$(BINARY_NAME) ; $(info Building $(BINARY_NAME)...) ## Build 
 	$(info Done!)
 
 $(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
-	@cd $(CURDIR)/cmd/$(BINARY_NAME) && CGO_ENABLED=0 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
+	@cd $(CURDIR)/cmd/$(BINARY_NAME) && CGO_ENABLED=0  GOOS=linux GOARCH=amd64 $(GO) build -o $(BUILDDIR)/$(BINARY_NAME) -tags no_openssl -ldflags $(LDFLAGS) -v
 
 # Tools
 $(GOLANGCI_LINT): | $(BINDIR) ; $(info  installing golangci-lint...)

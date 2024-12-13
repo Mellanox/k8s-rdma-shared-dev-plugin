@@ -1,3 +1,18 @@
+release steps:
+
+1. docker buildx build --platform linux/amd64 -t 605454121064.dkr.ecr.us-east-1.amazonaws.com/k8s-rdma-shared-dev-plugin:0.0.1-beta.1 . -f Dockerfile
+2. aws ecr get-login-password | docker login -u AWS --password-stdin "https://$(aws sts get-caller-identity --query 'Account' --output text).dkr.ecr.us-east-1.amazonaws.com"
+3. docker push 605454121064.dkr.ecr.us-east-1.amazonaws.com/k8s-rdma-shared-dev-plugin:0.0.1-beta.1
+
+
+
+
+
+
+
+
+
+
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Mellanox/k8s-rdma-shared-dev-plugin)](https://goreportcard.com/report/github.com/Mellanox/rdma-cni)
 [![Build Status](https://travis-ci.com/Mellanox/k8s-rdma-shared-dev-plugin.svg?branch=master)](https://travis-ci.com/Mellanox/k8s-rdma-shared-dev-plugin)
