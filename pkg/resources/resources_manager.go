@@ -203,20 +203,6 @@ func (rm *resourceManager) InitServers() error {
 		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
 		filteredDevices := rm.GetFilteredDevices(devices, &config.Selectors)
-		// NOTE: it's a temporary workaround to bring interfaces in UP state until
-		// Network Operator will be able to do it.
-		for _, device := range filteredDevices {
-			link, err := rm.netlinkManager.LinkByName(device.GetIfName())
-			if err != nil {
-				log.Printf("Warning: InitServers(): unable to get NIC info: %s", err)
-				continue
-			}
-
-			if rm.netlinkManager.LinkSetUp(link) != nil {
-				log.Printf("Warning: InitServers(): unable to set NIC %s to up state: %s", device.GetIfName(), err)
-				continue
-			}
-		}
 
 		if len(filteredDevices) == 0 {
 			log.Printf("Warning: no devices in device pool, creating empty resource server for %s", config.ResourceName)
