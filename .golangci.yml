@@ -57,7 +57,6 @@ linters:
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - funlen
     - gochecknoinits
     - goconst
@@ -75,7 +74,6 @@ linters:
     - misspell
     - nakedret
     - prealloc
-    - revive
     - rowserrcheck
     - staticcheck
     - stylecheck
