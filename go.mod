@@ -14,7 +14,7 @@ require (
 	github.com/vishvananda/netlink v1.1.0
 	golang.org/x/net v0.33.0
 	google.golang.org/grpc v1.56.3
-	k8s.io/kubelet v0.27.3
+	k8s.io/kubelet v0.27.16
 )
 
 require (
@@ -24,7 +24,7 @@ require (
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
