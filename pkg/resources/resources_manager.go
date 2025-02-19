@@ -353,27 +353,27 @@ func (rm *resourceManager) GetFilteredDevices(devices []types.PciNetDevice,
 	filteredDevice := devices
 
 	// filter by Vendors list
-	if selector.Vendors != nil && len(selector.Vendors) > 0 {
+	if len(selector.Vendors) > 0 {
 		filteredDevice = NewVendorSelector(selector.Vendors).Filter(filteredDevice)
 	}
 
 	// filter by DeviceIDs list
-	if selector.DeviceIDs != nil && len(selector.DeviceIDs) > 0 {
+	if len(selector.DeviceIDs) > 0 {
 		filteredDevice = NewDeviceSelector(selector.DeviceIDs).Filter(filteredDevice)
 	}
 
 	// filter by Driver list
-	if selector.Drivers != nil && len(selector.Drivers) > 0 {
+	if len(selector.Drivers) > 0 {
 		filteredDevice = NewDriverSelector(selector.Drivers).Filter(filteredDevice)
 	}
 
 	// filter by IfNames list
-	if selector.IfNames != nil && len(selector.IfNames) > 0 {
+	if len(selector.IfNames) > 0 {
 		filteredDevice = NewIfNameSelector(selector.IfNames).Filter(filteredDevice)
 	}
 
 	// filter by LinkType list
-	if selector.LinkTypes != nil && len(selector.LinkTypes) > 0 {
+	if len(selector.LinkTypes) > 0 {
 		filteredDevice = NewLinkTypeSelector(selector.LinkTypes).Filter(filteredDevice)
 	}
 

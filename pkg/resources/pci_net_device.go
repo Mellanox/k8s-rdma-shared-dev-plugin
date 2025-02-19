@@ -45,7 +45,7 @@ func NewPciNetDevice(dev *ghw.PCIDevice, rds types.RdmaDeviceSpec,
 	}
 
 	linkType := ""
-	if len(ifName) > 0 {
+	if ifName != "" {
 		link, err := nLink.LinkByName(ifName)
 		if err != nil {
 			return nil, err

@@ -81,6 +81,7 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(rm.watchMode).To(Equal(false))
 		})
 	})
+	//nolint:dupl
 	Context("ReadConfig", func() {
 		It("Read valid config file with non default periodic update", func() {
 			configData := `{"configList": [{
@@ -505,6 +506,7 @@ var _ = Describe("ResourcesManger", func() {
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
+	//nolint:dupl
 	Context("StopAllServers", func() {
 		It("stop valid server", func() {
 			fakeResourceServer := mocks.ResourceServer{}
@@ -532,6 +534,7 @@ var _ = Describe("ResourcesManger", func() {
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 	})
+	//nolint:dupl
 	Context("RestartAllServers", func() {
 		It("restart valid server", func() {
 			fakeResourceServer := mocks.ResourceServer{}

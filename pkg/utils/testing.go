@@ -6,6 +6,12 @@ import (
 	"path"
 )
 
+// File and directory permission constants
+const (
+	DirPerm  = 0700 // Default directory permissions
+	FilePerm = 0600 // Default file permissions
+)
+
 // FakeFilesystem allows to setup isolated fake files structure used for the tests.
 type FakeFilesystem struct {
 	RootDir  string
@@ -26,13 +32,13 @@ func (fs *FakeFilesystem) Use() func() {
 	fs.RootDir = tmpDir
 
 	for _, dir := range fs.Dirs {
-		osErr := os.MkdirAll(path.Join(fs.RootDir, dir), 0700)
+		osErr := os.MkdirAll(path.Join(fs.RootDir, dir), DirPerm)
 		if osErr != nil {
 			panic(fmt.Errorf("error creating fake directory: %s", osErr.Error()))
 		}
 	}
 	for filename, body := range fs.Files {
-		ioErr := os.WriteFile(path.Join(fs.RootDir, filename), body, 0600)
+		ioErr := os.WriteFile(path.Join(fs.RootDir, filename), body, FilePerm)
 		if ioErr != nil {
 			panic(fmt.Errorf("error creating fake file: %s", ioErr.Error()))
 		}
@@ -43,7 +49,7 @@ func (fs *FakeFilesystem) Use() func() {
 			panic(fmt.Errorf("error creating fake symlink: %s", osErr.Error()))
 		}
 	}
-	err = os.MkdirAll(path.Join(fs.RootDir, "usr/share/hwdata"), 0700)
+	err = os.MkdirAll(path.Join(fs.RootDir, "usr/share/hwdata"), DirPerm)
 	if err != nil {
 		panic(fmt.Errorf("error creating fake directory: %s", err.Error()))
 	}
@@ -55,7 +61,7 @@ func (fs *FakeFilesystem) Use() func() {
 	if err != nil {
 		panic(fmt.Errorf("error reading file: %s", err.Error()))
 	}
-	err = os.WriteFile(path.Join(fs.RootDir, "usr/share/hwdata/pci.ids"), pciData, 0600)
+	err = os.WriteFile(path.Join(fs.RootDir, "usr/share/hwdata/pci.ids"), pciData, FilePerm)
 	if err != nil {
 		panic(fmt.Errorf("error creating fake file: %s", err.Error()))
 	}
