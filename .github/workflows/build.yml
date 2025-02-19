@@ -9,7 +9,7 @@ jobs:
       contents: read
     steps:
       - name: Set up Go 1.x
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
       - name: checkout
@@ -23,7 +23,7 @@ jobs:
       contents: read
     steps:
       - name: Set up Go 1.x
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
       - name: checkout
@@ -39,7 +39,7 @@ jobs:
       contents: read
     steps:
       - name: Set up Go 1.x
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: '1.23.x'
       - name: checkout
