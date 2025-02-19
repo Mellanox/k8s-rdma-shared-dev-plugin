@@ -75,6 +75,10 @@ func main() {
 		log.Fatalf("Exiting.. one or more invalid configuration(s) given: %v", err)
 	}
 
+	if err := rm.SetWatchMode(); err != nil {
+		log.Fatalln(err.Error())
+	}
+
 	if err := rm.ValidateRdmaSystemMode(); err != nil {
 		log.Fatalf("Exiting.. can not change : %v", err)
 	}
