@@ -11,7 +11,6 @@ RUN make clean && \
     make build
 
 FROM alpine:3.21.3
-RUN apk add --no-cache kmod=30-r3 hwdata-pci=0.370-r0
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"
