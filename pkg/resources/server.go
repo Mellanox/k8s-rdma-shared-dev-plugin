@@ -295,7 +295,7 @@ func (rs *resourceServer) register() error {
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
 	log.Printf("ListAndWatch called by kubelet for: %s", rs.resourceName)
 	resp := new(pluginapi.ListAndWatchResponse)
 
@@ -366,7 +366,7 @@ func (rs *resourceServer) sendDevices(resp *pluginapi.ListAndWatchResponse,
 }
 
 // Allocate which return list of devices.
-func (rs *resourceServer) Allocate(ctx context.Context, r *pluginapi.AllocateRequest) (
+func (rs *resourceServer) Allocate(_ context.Context, r *pluginapi.AllocateRequest) (
 	*pluginapi.AllocateResponse, error) {
 	log.Println("allocate request:", r)
 
@@ -420,7 +420,7 @@ func (rs *resourceServer) cleanup() error {
 }
 
 // GetInfo get info of plugin
-func (rs *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
+func (rs *resourceServer) GetInfo(_ context.Context, _ *registerapi.InfoRequest) (*registerapi.PluginInfo, error) {
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              rs.resourceName,
@@ -431,7 +431,7 @@ func (rs *resourceServer) GetInfo(ctx context.Context, rqt *registerapi.InfoRequ
 }
 
 // NotifyRegistrationStatus notify for registration status
-func (rs *resourceServer) NotifyRegistrationStatus(ctx context.Context, regstat *registerapi.RegistrationStatus) (
+func (rs *resourceServer) NotifyRegistrationStatus(_ context.Context, regstat *registerapi.RegistrationStatus) (
 	*registerapi.RegistrationStatusResponse, error) {
 	if regstat.PluginRegistered {
 		log.Printf("%s gets registered successfully at Kubelet \n", rs.socketName)
@@ -490,7 +490,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 }
 
 func (rs *resourceServer) GetPreferredAllocation(
-	ctx context.Context, req *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
+	_ context.Context, _ *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
 	return nil, nil
 }
 

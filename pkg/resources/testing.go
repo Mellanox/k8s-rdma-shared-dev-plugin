@@ -54,7 +54,7 @@ func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error
 	defer timeoutCancel()
 	go func() {
 		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
 				return net.Dial("unix", addr)
 			}),
 		)
@@ -128,7 +128,7 @@ func (s *fakeRegistrationServer) registerPlugin() error {
 	return nil
 }
 
-func (s *fakeRegistrationServer) Register(ctx context.Context, r *pluginapi.RegisterRequest) (api *pluginapi.Empty,
+func (s *fakeRegistrationServer) Register(_ context.Context, r *pluginapi.RegisterRequest) (api *pluginapi.Empty,
 	err error) {
 	s.pluginEndpoint = r.Endpoint
 	api = &pluginapi.Empty{}

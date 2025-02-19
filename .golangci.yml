@@ -48,16 +48,13 @@ linters-settings:
     for-loops: false # Report preallocation suggestions on for loops, false by default
 
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
   disable-all: true
   enable:
     - bodyclose
-    - depguard
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
+    - copyloopvar
     - funlen
     - gochecknoinits
     - goconst
@@ -65,7 +62,7 @@ linters:
     - gocognit
     - gofmt
     - goimports
-    - gomnd
+    - mnd
     - goprintffuncname
     - gosec
     - gosimple
@@ -90,9 +87,15 @@ issues:
   exclude-rules:
     - path: _test\.go
       linters:
-        - gomnd
         - goconst
         - dupl
+        - revive
+        - stylecheck
+      text: "should not use dot imports"
+    - path: _test\.go
+      linters:
+        - mnd
+        - goconst
     - text: "Magic number: 1"
       linters:
-        - gomnd
+        - mnd
