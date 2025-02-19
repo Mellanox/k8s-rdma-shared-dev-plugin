@@ -400,9 +400,9 @@ var _ = Describe("ResourcesManger", func() {
 					"sys/bus/pci/devices/0000:08:00.0"},
 				Files: map[string][]byte{
 					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
-						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i000"),
 					"sys/bus/pci/devices/0000:08:00.0/modalias": []byte(
-						"pci:v00008086d00001D02sv000015D9sd00000717bc01sc06i01")},
+						"pci:v00008086d00001D02sv000015D9sd00000717bc01sc06i001")},
 			}
 			defer fs.Use()()
 			os.Setenv("GHW_CHROOT", fs.RootDir)
@@ -570,7 +570,7 @@ var _ = Describe("ResourcesManger", func() {
 				},
 				Files: map[string][]byte{
 					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
-						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i000"),
 				},
 			}
 			defer fs.Use()()
@@ -610,7 +610,7 @@ var _ = Describe("ResourcesManger", func() {
 				},
 				Files: map[string][]byte{
 					"sys/bus/pci/devices/0000:02:00.0/modalias": []byte(
-						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i00"),
+						"pci:v000015B3d00001017sv000015B3sd00000001bc02sc00i000"),
 				},
 			}
 			defer fs.Use()()
