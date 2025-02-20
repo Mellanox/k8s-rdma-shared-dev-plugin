@@ -297,7 +297,7 @@ func (rm *resourceManager) DiscoverHostDevices() error {
 		return fmt.Errorf("error getting PCI info: %v", err)
 	}
 
-	devices := pci.ListDevices()
+	devices := pci.Devices
 	if len(devices) == 0 {
 		log.Println("Warning: DiscoverHostDevices(): no PCI network device found")
 	}
