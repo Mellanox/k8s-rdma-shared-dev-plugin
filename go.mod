@@ -5,7 +5,7 @@ go 1.23
 require (
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/container-orchestrated-devices/container-device-interface v0.5.4
-	github.com/jaypipes/ghw v0.13.0
+	github.com/jaypipes/ghw v0.14.0
 	github.com/jaypipes/pcidb v1.0.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.36.2
@@ -33,6 +33,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.1.0 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/samber/lo v1.47.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
