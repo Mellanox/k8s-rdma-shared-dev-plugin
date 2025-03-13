@@ -12,7 +12,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
-	golang.org/x/net v0.35.0
+	golang.org/x/net v0.37.0
 	google.golang.org/grpc v1.56.3
 	k8s.io/kubelet v0.27.16
 )
@@ -38,8 +38,8 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/vishvananda/netns v0.0.4 // indirect
 	golang.org/x/mod v0.17.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/text v0.23.0 // indirect
 	google.golang.org/genproto v0.0.0 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
