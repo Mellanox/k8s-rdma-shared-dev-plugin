@@ -1,6 +1,6 @@
 module github.com/Mellanox/k8s-rdma-shared-dev-plugin
 
-go 1.23
+go 1.24
 
 require (
 	github.com/Mellanox/rdmamap v1.1.0
