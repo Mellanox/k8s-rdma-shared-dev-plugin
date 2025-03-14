@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"time"
@@ -71,15 +72,15 @@ const (
 )
 
 var (
-	activeSockDir     = "/var/lib/kubelet/plugins_registry"
-	deprecatedSockDir = "/var/lib/kubelet/device-plugins"
+	kubeletPluginRegistry    = "plugins_registry"
+	deprecatedPluginRegistry = "device-plugins"
 )
 
 // resourceManager for plugin
 type resourceManager struct {
 	configFile             string
 	defaultResourcePrefix  string
-	socketSuffix           string
+	kubeletRootDir         string
 	watchMode              bool
 	configList             []*types.UserConfig
 	resourceServers        []types.ResourceServer
@@ -90,18 +91,12 @@ type resourceManager struct {
 	useCdi                 bool
 }
 
-func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
-	watcherMode := detectPluginWatchMode(activeSockDir)
-	if watcherMode {
-		fmt.Println("Using Kubelet Plugin Registry Mode")
-	} else {
-		fmt.Println("Using Deprecated Devie Plugin Registry Path")
-	}
+func NewResourceManager(configFile, kubeletRootDir string, useCdi bool) types.ResourceManager {
 	return &resourceManager{
 		configFile:            configFile,
+		watchMode:             detectPluginWatchMode(path.Join(kubeletRootDir, kubeletPluginRegistry)),
+		kubeletRootDir:        kubeletRootDir,
 		defaultResourcePrefix: rdmaHcaResourcePrefix,
-		socketSuffix:          socketSuffix,
-		watchMode:             watcherMode,
 		netlinkManager:        &netlinkManager{},
 		rds:                   NewRdmaDeviceSpec(requiredRdmaDevices),
 		useCdi:                useCdi,
@@ -244,7 +239,7 @@ func (rm *resourceManager) InitServers() error {
 				return err
 			}
 		}
-		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.socketSuffix, rm.useCdi)
+		rs, err := newResourceServer(config, filteredDevices, rm.kubeletRootDir, rm.watchMode, rm.useCdi)
 		if err != nil {
 			return err
 		}
