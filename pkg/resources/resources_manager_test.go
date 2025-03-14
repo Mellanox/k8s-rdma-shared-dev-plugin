@@ -68,31 +68,21 @@ func (l *FakeLink) Type() string {
 
 var _ = Describe("ResourcesManger", func() {
 	Context("NewResourceManager", func() {
-		const activeSockDirBackUP = "/var/lib/kubelet/plugins_registry"
-
 		It("Resource Manager with watcher mode", func() {
 			fs := utils.FakeFilesystem{
-				Dirs: []string{activeSockDir[1:]},
+				Dirs: []string{kubeletPluginRegistry},
 			}
 			defer fs.Use()()
-			activeSockDir = path.Join(fs.RootDir, activeSockDirBackUP[1:])
-			defer func() {
-				activeSockDir = activeSockDirBackUP
-			}()
 
-			obj := NewResourceManager(DefaultConfigFilePath, false)
+			obj := NewResourceManager(DefaultConfigFilePath, fs.RootDir, false)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(true))
 		})
 		It("Resource Manager without watcher mode", func() {
 			fs := utils.FakeFilesystem{}
 			defer fs.Use()()
-			activeSockDir = path.Join(fs.RootDir, "noDir")
-			defer func() {
-				activeSockDir = activeSockDirBackUP
-			}()
 
-			obj := NewResourceManager(DefaultConfigFilePath, false)
+			obj := NewResourceManager(DefaultConfigFilePath, fs.RootDir, false)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(false))
 		})
