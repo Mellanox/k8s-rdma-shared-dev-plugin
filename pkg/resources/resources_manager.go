@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"time"
@@ -52,6 +53,9 @@ const (
 
 	// RDMA subsystem network namespace mode
 	rdmaExclusive = "exclusive"
+
+	// Default kubelet root dir
+	defaultKubeletRootDir = "/var/lib/kubelet"
 )
 
 var (
@@ -72,20 +76,14 @@ type resourceManager struct {
 	rds                    types.RdmaDeviceSpec
 	PeriodicUpdateInterval time.Duration
 	useCdi                 bool
+	kubeletRootDir         string
 }
 
 func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
-	watcherMode := detectPluginWatchMode(activeSockDir)
-	if watcherMode {
-		fmt.Println("Using Kubelet Plugin Registry Mode")
-	} else {
-		fmt.Println("Using Deprecated Devie Plugin Registry Path")
-	}
 	return &resourceManager{
 		configFile:            configFile,
 		defaultResourcePrefix: rdmaHcaResourcePrefix,
 		socketSuffix:          socketSuffix,
-		watchMode:             watcherMode,
 		netlinkManager:        &netlinkManager{},
 		rds:                   NewRdmaDeviceSpec(requiredRdmaDevices),
 		useCdi:                useCdi,
@@ -106,6 +104,12 @@ func (rm *resourceManager) ReadConfig() error {
 	}
 
 	log.Printf("loaded config: %+v \n", config.ConfigList)
+
+	// check kubelet root dir config
+	rm.kubeletRootDir = defaultKubeletRootDir
+	if config.KubeletRootDir != "" {
+		rm.kubeletRootDir = config.KubeletRootDir
+	}
 
 	// if periodic update is not set then use the default value
 	if config.PeriodicUpdateInterval == nil {
@@ -228,7 +232,7 @@ func (rm *resourceManager) InitServers() error {
 				return err
 			}
 		}
-		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.socketSuffix, rm.useCdi)
+		rs, err := newResourceServer(config, filteredDevices, rm.watchMode, rm.socketSuffix, rm.useCdi, rm.kubeletRootDir)
 		if err != nil {
 			return err
 		}
@@ -417,4 +421,17 @@ func (rm *resourceManager) PeriodicUpdate() func() {
 			close(stopChan)
 		}
 	}
+}
+
+func (rm *resourceManager) SetWatchMode() error {
+	sockPathDir := path.Join(rm.kubeletRootDir, "plugins_registry")
+	watcherMode := detectPluginWatchMode(sockPathDir)
+	if watcherMode {
+		fmt.Println("Using Kubelet Plugin Registry Mode")
+	} else {
+		fmt.Println("Using Deprecated Devie Plugin Registry Path")
+	}
+	rm.watchMode = watcherMode
+
+	return nil
 }
