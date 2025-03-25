@@ -69,6 +69,11 @@ HADOLINT_TOOL = $(BINDIR)/hadolint
 $(HADOLINT_TOOL): | $(BINDIR) ; $(info  installing hadolint...)
 	$(call wget-install-tool,$(HADOLINT_TOOL),"https://github.com/hadolint/hadolint/releases/download/v2.12.1-beta/hadolint-Linux-x86_64")
 
+MOCKERY = $(BINDIR)/mockery
+MOCKERY_VER = v3.2.5
+$(MOCKERY): | $(BINDIR) ; $(info  installing mockery...)
+	$Q GOBIN=$(BINDIR) go install github.com/vektra/mockery/v3@$(MOCKERY_VER)
+
 # Tests
 .PHONY: lint
 lint: | $(GOLANGCI_LINT) ; $(info  running golangci-lint...) @ ## Run golangci-lint
@@ -110,6 +115,10 @@ ubi-image: TAG=mellanox/k8s-rdma-shared-dev-plugin-ubi
 ubi-image: image       ## Build UBI-based container image
 
 # Misc
+
+.PHONY: generate-mocks
+generate-mocks: | $(MOCKERY) ; $(info  generating mocks...) @ ## Generate mocks
+	$Q $(MOCKERY)
 
 .PHONY: clean
 clean: ; $(info  Cleaning...)	 ## Cleanup everything

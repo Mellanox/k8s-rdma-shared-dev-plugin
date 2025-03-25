@@ -34,10 +34,9 @@ func createFakeRegistrationServer(sockDir, endpoint string, failOnRegister,
 }
 
 func (s *fakeRegistrationServer) dial() (registerapi.RegistrationClient, *grpc.ClientConn, error) {
-	sockPath := path.Join(s.sockDir, s.pluginEndpoint)
-	timeout := 10 * time.Second
+	sockPath := path.Join("unix://", s.sockDir, s.pluginEndpoint)
 
-	c, err := dial(sockPath, timeout)
+	c, err := getClientConn(sockPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to dial socket %s, err: %v", sockPath, err)
 	}
@@ -45,29 +44,12 @@ func (s *fakeRegistrationServer) dial() (registerapi.RegistrationClient, *grpc.C
 	return registerapi.NewRegistrationClient(c), c, nil
 }
 
-func dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
+func getClientConn(unixSocketPath string) (*grpc.ClientConn, error) {
 	var c *grpc.ClientConn
-	var err error
-	connChannel := make(chan interface{})
 
-	ctx, timeoutCancel := context.WithTimeout(context.TODO(), timeout)
-	defer timeoutCancel()
-	go func() {
-		c, err = grpc.DialContext(ctx, unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-				return net.Dial("unix", addr)
-			}),
-		)
-		connChannel <- "done"
-	}()
+	c, err := grpc.NewClient(unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("timout while trying to connect %s", unixSocketPath)
-
-	case <-connChannel:
-		return c, err
-	}
+	return c, err
 }
 
 func (s *fakeRegistrationServer) getInfo(ctx context.Context,

@@ -40,7 +40,6 @@ import (
 
 const (
 	// Local use
-	cDialTimeout      = 5 * time.Second
 	watchWaitTime     = 5 * time.Second
 	cdiResourcePrefix = "nvidia.com"
 	cdiResourceKind   = "net-rdma"
@@ -105,17 +104,15 @@ func (rsc *resourcesServerPort) Register(client pluginapi.RegistrationClient, re
 	return err
 }
 
-func (rsc *resourcesServerPort) Dial(unixSocketPath string, timeout time.Duration) (*grpc.ClientConn, error) {
+func (rsc *resourcesServerPort) GetClientConn(unixSocketPath string) (*grpc.ClientConn, error) {
 	var c *grpc.ClientConn
 	var err error
 
-	ctx, timeoutCancel := context.WithTimeout(context.Background(), timeout)
-	defer timeoutCancel()
-	c, err = grpc.DialContext(
-		ctx, "unix://"+unixSocketPath, grpc.WithBlock(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	c, err = grpc.NewClient(
+		"unix://"+unixSocketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect %s, %w", unixSocketPath, err)
+		return nil, fmt.Errorf("failed to create grpc client connection for %s, %w", unixSocketPath, err)
 	}
 
 	return c, nil
@@ -199,8 +196,8 @@ func (rs *resourceServer) Start() error {
 
 	rs.rsConnector.Serve(sock)
 
-	// Wait for server to start by launching a blocking connection
-	conn, err := rs.rsConnector.Dial(rs.socketPath, cDialTimeout)
+	// Get client connection
+	conn, err := rs.rsConnector.GetClientConn(rs.socketPath)
 	if err != nil {
 		return err
 	}
@@ -278,7 +275,7 @@ func (rs *resourceServer) Watch() {
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (rs *resourceServer) register() error {
 	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
-	conn, err := rs.rsConnector.Dial(kubeletEndpoint, cDialTimeout)
+	conn, err := rs.rsConnector.GetClientConn(kubeletEndpoint)
 	if err != nil {
 		return err
 	}
