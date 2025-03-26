@@ -7,7 +7,7 @@ on:
 jobs:
   build-and-push-amd64-k8s-rdma-shared-dev-plugin:
     name: image push amd64
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Set repository as lower-case output variable
         id: repo_name
@@ -38,7 +38,7 @@ jobs:
 
   build-and-push-arm64-k8s-rdma-shared-dev-plugin:
     name: image push arm64
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Set repository as lower-case output variable
         id: repo_name
@@ -69,7 +69,7 @@ jobs:
 
   build-and-push-ppc64le-k8s-rdma-shared-dev-plugin:
     name: image push ppc64le
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Set repository as lower-case output variable
         id: repo_name
@@ -99,7 +99,7 @@ jobs:
           file: ./Dockerfile
 
   push-manifest:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: [build-and-push-amd64-k8s-rdma-shared-dev-plugin,build-and-push-arm64-k8s-rdma-shared-dev-plugin,build-and-push-ppc64le-k8s-rdma-shared-dev-plugin]
     steps:
     - name: Set repository as lower-case output variable
