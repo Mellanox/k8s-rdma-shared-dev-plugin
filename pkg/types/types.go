@@ -48,6 +48,7 @@ type UserConfig struct {
 
 // UserConfigList config list for servers
 type UserConfigList struct {
+	KubeletRootDir         string       `json:"kubeletRootDir"`
 	PeriodicUpdateInterval *int         `json:"periodicUpdateInterval"`
 	ConfigList             []UserConfig `json:"configList"`
 }
@@ -75,6 +76,7 @@ type ResourceManager interface {
 	RestartAllServers() error
 	GetFilteredDevices(devices []PciNetDevice, selector *Selectors) []PciNetDevice
 	PeriodicUpdate() func()
+	SetWatchMode() error
 }
 
 // ResourceServerPort to connect the resources server to k8s
