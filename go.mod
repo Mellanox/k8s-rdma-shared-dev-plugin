@@ -8,7 +8,7 @@ require (
 	github.com/jaypipes/ghw v0.16.0
 	github.com/jaypipes/pcidb v1.0.1
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.36.3
+	github.com/onsi/gomega v1.37.0
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
