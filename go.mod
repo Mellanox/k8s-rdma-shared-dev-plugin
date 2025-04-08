@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
 	golang.org/x/net v0.39.0
-	google.golang.org/grpc v1.56.3
+	google.golang.org/grpc v1.71.1
 	k8s.io/kubelet v0.27.16
 )
 
