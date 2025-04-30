@@ -65,7 +65,7 @@ func (x *devPluginListAndWatchServerMock) SetContext(ctx context.Context) {
 
 var _ = Describe("resourceServer tests", func() {
 	fakeDeviceSpec := []*pluginapi.DeviceSpec{{HostPath: "fake", ContainerPath: "fake"}}
-	fakePciDevice := &mocks.PciNetDevice{}
+	fakePciDevice := mocks.NewMockPciNetDevice(GinkgoT())
 	fakePciDevice.On("GetRdmaSpec").Return(fakeDeviceSpec)
 	fakeDeviceList := []types.PciNetDevice{fakePciDevice}
 	Context("newResourcesServer", func() {
@@ -106,7 +106,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			fakePciDevice := &mocks.PciNetDevice{}
+			fakePciDevice := mocks.NewMockPciNetDevice(GinkgoT())
 			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
 			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
 			deviceList := []types.PciNetDevice{fakePciDevice}
@@ -158,12 +158,12 @@ var _ = Describe("resourceServer tests", func() {
 	Context("Start", func() {
 		It("start server with plugin watcher enabled", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, nil)
+			rsc.On("GetClientConn", mock.Anything).Return(nil, nil)
 			rsc.On("Close", mock.Anything).Return()
 			rs := resourceServer{watchMode: true, rsConnector: rsc}
 			err := rs.Start()
@@ -172,12 +172,12 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("start server with plugin watcher disabled", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, nil)
+			rsc.On("GetClientConn", mock.Anything).Return(nil, nil)
 			rsc.On("Close", mock.Anything).Return()
 			rsc.On("Register", mock.Anything, mock.Anything).Return(nil)
 			rs := resourceServer{watchMode: false, rsConnector: rsc}
@@ -186,7 +186,7 @@ var _ = Describe("resourceServer tests", func() {
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
 		It("start server with failing to listen to socket", func() {
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, errors.New("failed"))
 			rs := resourceServer{rsConnector: rsc}
@@ -194,14 +194,14 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(err).To(HaveOccurred())
 			rsc.AssertExpectations(testCallsAssertionReporter)
 		})
-		It("start server with plugin failed to dial server", func() {
+		It("start server with plugin failed to get grpc client connection", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, errors.New("failed"))
+			rsc.On("GetClientConn", mock.Anything).Return(nil, errors.New("failed"))
 			rs := resourceServer{rsConnector: rsc}
 			err := rs.Start()
 			Expect(err).To(HaveOccurred())
@@ -209,12 +209,12 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("start server with plugin watcher disabled failed to register", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, nil)
+			rsc.On("GetClientConn", mock.Anything).Return(nil, nil)
 			rsc.On("Close", mock.Anything).Return()
 			rsc.On("Stop").Return()
 			rsc.On("Register", mock.Anything, mock.Anything).Return(errors.New("failed"))
@@ -227,7 +227,7 @@ var _ = Describe("resourceServer tests", func() {
 	Context("Stop", func() {
 		It("stop server with correct parameters with watch mode enabled", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("DeleteServer").Return()
 			rsc.On("GetServer").Return(grpcServer)
 			rsc.On("Stop").Return()
@@ -243,7 +243,7 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("stop server with correct parameters with watch mode disabled", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("DeleteServer").Return()
 			rsc.On("GetServer").Return(grpcServer)
 			rsc.On("Stop").Return()
@@ -273,7 +273,7 @@ var _ = Describe("resourceServer tests", func() {
 	Context("Restart", func() {
 		It("Restart server with correct parameters", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("DeleteServer").Return()
@@ -300,14 +300,14 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("Failed to restart server", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("Stop").Return()
 			rsc.On("DeleteServer").Return()
 			rsc.On("CreateServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, errors.New("error"))
+			rsc.On("GetClientConn", mock.Anything).Return(nil, errors.New("error"))
 
 			rs := resourceServer{
 				watchMode:   true,
@@ -350,13 +350,13 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("Watch socket and send notification to restart successfully", func() {
 			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("GetServer", mock.Anything).Return(grpcServer)
 			rsc.On("CreateServer").Return()
 			rsc.On("DeleteServer").Return()
 			rsc.On("Listen", mock.Anything, mock.Anything).Return(nil, nil)
 			rsc.On("Serve", mock.Anything).Return()
-			rsc.On("Dial", mock.Anything, mock.Anything).Return(nil, nil)
+			rsc.On("GetClientConn", mock.Anything).Return(nil, nil)
 			rsc.On("Stop").Return()
 			rsc.On("Close", mock.Anything).Return()
 
@@ -486,7 +486,7 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("NotifyRegistrationStatus with plugin unregistered", func() {
 			regstat := &registerapi.RegistrationStatus{PluginRegistered: false}
-			rsc := &mocks.ResourceServerConnector{}
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
 			rsc.On("Stop").Return()
 			rs := resourceServer{socketName: "fake.sock", rsConnector: rsc}
 			_, err := rs.NotifyRegistrationStatus(context.TODO(), regstat)

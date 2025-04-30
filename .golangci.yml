@@ -31,7 +31,7 @@ linters-settings:
         # don't include the "operation" and "assign"
         checks: [argument,case,condition,return]
   govet:
-    check-shadowing: true
+    shadow: true
     settings:
       printf:
         funcs:

@@ -21,7 +21,6 @@ package types
 import (
 	"net"
 	"os"
-	"time"
 
 	"github.com/vishvananda/netlink"
 	"google.golang.org/grpc"
@@ -87,7 +86,7 @@ type ResourceServerPort interface {
 	Stop()
 	Close(*grpc.ClientConn)
 	Register(pluginapi.RegistrationClient, *pluginapi.RegisterRequest) error
-	Dial(string, time.Duration) (*grpc.ClientConn, error)
+	GetClientConn(string) (*grpc.ClientConn, error)
 }
 
 // NotifierFactory register signals to listen for

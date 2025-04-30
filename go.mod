@@ -13,7 +13,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/vishvananda/netlink v1.3.0
 	golang.org/x/net v0.39.0
-	google.golang.org/grpc v1.56.3
+	google.golang.org/grpc v1.72.0
 	k8s.io/kubelet v0.27.16
 )
 
@@ -23,7 +23,6 @@ require (
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
-	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -39,17 +38,11 @@ require (
 	golang.org/x/mod v0.17.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
-	google.golang.org/genproto v0.0.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.0 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
-)
-
-replace (
-	github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
-	golang.org/x/sys v0.0.0 => github.com/golang/sys v0.0.0-20190813064441-fde4db37ae7a
-	google.golang.org/genproto v0.0.0 => github.com/googleapis/go-genproto v0.0.0-20200117163144-32f20d992d24
 )

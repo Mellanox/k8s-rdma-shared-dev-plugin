@@ -50,13 +50,13 @@ var _ = Describe("Cdi", func() {
 			defer fs.Use()()
 			cdiLib.GetRegistry(cdiLib.WithSpecDirs(fs.RootDir+"/"+staticDir, fs.RootDir+"/"+dynamicDir))
 
-			device := mocks.PciNetDevice{}
+			device := mocks.NewMockPciNetDevice(GinkgoT())
 			device.On("GetPciAddr").Return("0000:00:00.1")
 			device.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{
 				{HostPath: "host_path", ContainerPath: "container_path"},
 			})
 
-			err := cdi.New().CreateCDISpec("test-prefix", "test-name", "test-pool", []types.PciNetDevice{&device})
+			err := cdi.New().CreateCDISpec("test-prefix", "test-name", "test-pool", []types.PciNetDevice{device})
 			Expect(err).NotTo(HaveOccurred())
 
 			cdiSpec, err := os.ReadFile(fs.RootDir + "/" + dynamicDir + "/test-prefix_test-pool.yaml")
@@ -76,10 +76,10 @@ kind: test-prefix/test-name`
 	})
 	Context("successfully create container annotation", func() {
 		It("should return container annotation", func() {
-			device := mocks.PciNetDevice{}
+			device := mocks.NewMockPciNetDevice(GinkgoT())
 			device.On("GetPciAddr").Return("0000:00:00.1")
 			cdi := cdi.New()
-			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{&device}, "example.com", "net")
+			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device}, "example.com", "net")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(annotations)).To(Equal(1))
 			annoKey := "cdi.k8s.io/example.com_net"

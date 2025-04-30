@@ -1,0 +1,16 @@
+all: false
+dir: '{{.InterfaceDir}}/mocks'
+filename: mocks.go
+force-file-write: true
+formatter: goimports
+log-level: info
+structname: '{{.Mock}}{{.InterfaceName}}'
+pkgname: 'mocks'
+recursive: false
+require-template-schema-exists: true
+template: testify
+template-schema: '{{.Template}}.schema.json'
+packages:
+  github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types:
+    config:
+      all: true

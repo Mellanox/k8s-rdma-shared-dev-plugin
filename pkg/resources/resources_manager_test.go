@@ -307,7 +307,7 @@ var _ = Describe("ResourcesManger", func() {
 	})
 	Context("GetDevices", func() {
 		It("Get full list of devices", func() {
-			rds := &mocks.RdmaDeviceSpec{}
+			rds := mocks.NewMockRdmaDeviceSpec(GinkgoT())
 			rds.On("Get", mock.Anything).Return([]*pluginapi.DeviceSpec{})
 			rds.On("VerifyRdmaSpec", mock.Anything).Return(nil)
 
@@ -330,7 +330,7 @@ var _ = Describe("ResourcesManger", func() {
 			deviceList := []*ghw.PCIDevice{
 				{Address: "0000:02:00.0", Vendor: &pcidb.Vendor{ID: "15b3"}, Product: &pcidb.Product{ID: "1017"}},
 				{Address: "0000:03:00.0", Vendor: &pcidb.Vendor{ID: "8080"}, Product: &pcidb.Product{ID: "1234"}}}
-			nLink := &mocks.NetlinkManager{}
+			nLink := mocks.NewMockNetlinkManager(GinkgoT())
 			link := &FakeLink{netlink.LinkAttrs{EncapType: "ether"}}
 			nLink.On("LinkByName", mock.Anything).Return(link, nil)
 			rm := &resourceManager{deviceList: deviceList, netlinkManager: nLink, rds: rds}
@@ -339,11 +339,11 @@ var _ = Describe("ResourcesManger", func() {
 	})
 	Context("GetFilteredDevices", func() {
 		It("Get full list of devices", func() {
-			dev1 := &mocks.PciNetDevice{}
-			dev2 := &mocks.PciNetDevice{}
-			dev3 := &mocks.PciNetDevice{}
-			dev4 := &mocks.PciNetDevice{}
-			dev5 := &mocks.PciNetDevice{}
+			dev1 := mocks.NewMockPciNetDevice(GinkgoT())
+			dev2 := mocks.NewMockPciNetDevice(GinkgoT())
+			dev3 := mocks.NewMockPciNetDevice(GinkgoT())
+			dev4 := mocks.NewMockPciNetDevice(GinkgoT())
+			dev5 := mocks.NewMockPciNetDevice(GinkgoT())
 
 			dev1.On("GetVendor").Return("15b3")
 			dev1.On("GetDeviceID").Return("1017")
@@ -472,34 +472,35 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
+
 	Context("StartAllServers", func() {
 		It("start valid server with watcher enabled", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Start").Return(nil)
 
 			rm := &resourceManager{watchMode: true,
-				resourceServers: []types.ResourceServer{&fakeResourceServer}}
+				resourceServers: []types.ResourceServer{fakeResourceServer}}
 
 			err := rm.StartAllServers()
 			Expect(err).ToNot(HaveOccurred())
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 		It("start valid server with watcher disabled", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Start").Return(nil)
 			fakeResourceServer.On("Watch").Return(nil)
 
 			rm := &resourceManager{watchMode: false,
-				resourceServers: []types.ResourceServer{&fakeResourceServer}}
+				resourceServers: []types.ResourceServer{fakeResourceServer}}
 
 			err := rm.StartAllServers()
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("start invalid server", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Start").Return(errors.New("failed"))
 
-			rm := &resourceManager{resourceServers: []types.ResourceServer{&fakeResourceServer}}
+			rm := &resourceManager{resourceServers: []types.ResourceServer{fakeResourceServer}}
 
 			err := rm.StartAllServers()
 			Expect(err).To(HaveOccurred())
@@ -509,10 +510,10 @@ var _ = Describe("ResourcesManger", func() {
 	//nolint:dupl
 	Context("StopAllServers", func() {
 		It("stop valid server", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Stop").Return(nil)
 
-			rm := &resourceManager{resourceServers: []types.ResourceServer{&fakeResourceServer}}
+			rm := &resourceManager{resourceServers: []types.ResourceServer{fakeResourceServer}}
 			// make sure that stop will be called
 			Expect(len(rm.resourceServers)).To(BeNumerically(">", 0))
 
@@ -521,10 +522,10 @@ var _ = Describe("ResourcesManger", func() {
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 		It("stop invalid server", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Stop").Return(errors.New("failed to stop"))
 
-			rm := &resourceManager{resourceServers: []types.ResourceServer{&fakeResourceServer}}
+			rm := &resourceManager{resourceServers: []types.ResourceServer{fakeResourceServer}}
 			// make sure that stop will be called
 			Expect(len(rm.resourceServers)).To(BeNumerically(">", 0))
 
@@ -537,10 +538,10 @@ var _ = Describe("ResourcesManger", func() {
 	//nolint:dupl
 	Context("RestartAllServers", func() {
 		It("restart valid server", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Restart").Return(nil)
 
-			rm := &resourceManager{resourceServers: []types.ResourceServer{&fakeResourceServer}}
+			rm := &resourceManager{resourceServers: []types.ResourceServer{fakeResourceServer}}
 			// make sure that Restart will be called
 			Expect(len(rm.resourceServers)).To(BeNumerically(">", 0))
 
@@ -549,10 +550,10 @@ var _ = Describe("ResourcesManger", func() {
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 		It("restart invalid server", func() {
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("Restart").Return(errors.New("failed to restart"))
 
-			rm := &resourceManager{resourceServers: []types.ResourceServer{&fakeResourceServer}}
+			rm := &resourceManager{resourceServers: []types.ResourceServer{fakeResourceServer}}
 			// make sure that Restart will be called
 			Expect(len(rm.resourceServers)).To(BeNumerically(">", 0))
 
@@ -577,21 +578,21 @@ var _ = Describe("ResourcesManger", func() {
 			os.Setenv("GHW_CHROOT", fs.RootDir)
 			defer os.Unsetenv("GHW_CHROOT")
 
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			fakeResourceServer.On("UpdateDevices", mock.Anything).Return()
 
-			nLink := &mocks.NetlinkManager{}
+			nLink := mocks.NewMockNetlinkManager(GinkgoT())
 			link := &FakeLink{netlink.LinkAttrs{EncapType: "ether"}}
 			nLink.On("LinkByName", mock.Anything).Return(link, nil)
 
-			rds := &mocks.RdmaDeviceSpec{}
+			rds := mocks.NewMockRdmaDeviceSpec(GinkgoT())
 			rds.On("Get", mock.Anything).Return([]*pluginapi.DeviceSpec{})
 			rds.On("VerifyRdmaSpec", mock.Anything).Return(nil)
 
 			configList := []*types.UserConfig{{Selectors: types.Selectors{Vendors: []string{"Vendors"}}}}
 			rm := &resourceManager{
 				configList:             configList,
-				resourceServers:        []types.ResourceServer{&fakeResourceServer},
+				resourceServers:        []types.ResourceServer{fakeResourceServer},
 				netlinkManager:         nLink,
 				rds:                    rds,
 				PeriodicUpdateInterval: 1 * time.Millisecond,
@@ -617,9 +618,9 @@ var _ = Describe("ResourcesManger", func() {
 			os.Setenv("GHW_CHROOT", fs.RootDir)
 			defer os.Unsetenv("GHW_CHROOT")
 
-			fakeResourceServer := mocks.ResourceServer{}
+			fakeResourceServer := mocks.NewMockResourceServer(GinkgoT())
 			rm := &resourceManager{
-				resourceServers:        []types.ResourceServer{&fakeResourceServer},
+				resourceServers:        []types.ResourceServer{fakeResourceServer},
 				PeriodicUpdateInterval: 0 * time.Millisecond,
 			}
 
