@@ -1,3 +1,4 @@
+include make/license.mk
 # Package related
 BINARY_NAME=k8s-rdma-shared-dp
 PACKAGE=k8s-rdma-shared-dev-plugin
