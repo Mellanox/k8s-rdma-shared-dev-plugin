@@ -60,12 +60,13 @@ func main() {
 
 	// add version flag
 	versionOpt := false
-	var configFilePath string
+	useCdi := false
+	var configFilePath, kubeletRootDir string
 	flag.BoolVar(&versionOpt, "version", false, "Show application version")
 	flag.BoolVar(&versionOpt, "v", false, "Show application version")
 	flag.StringVar(
 		&configFilePath, "config-file", resources.DefaultConfigFilePath, "path to device plugin config file")
-	useCdi := false
+	flag.StringVar(&kubeletRootDir, "kubelet-root-dir", "/var/lib/kubelet", "root directory of kubelet")
 	flag.BoolVar(&useCdi, "use-cdi", false,
 		"Use Container Device Interface to expose devices in containers")
 	flag.Parse()
@@ -80,7 +81,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager(configFilePath, useCdi)
+	rm := resources.NewResourceManager(configFilePath, kubeletRootDir, useCdi)
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {

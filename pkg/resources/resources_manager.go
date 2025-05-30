@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"regexp"
 	"strconv"
 	"time"
@@ -90,7 +91,12 @@ type resourceManager struct {
 	useCdi                 bool
 }
 
-func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
+func NewResourceManager(configFile, kubeletRootDir string, useCdi bool) types.ResourceManager {
+	if kubeletRootDir != "" {
+		activeSockDir = path.Join(kubeletRootDir, "plugins_registry")
+		deprecatedSockDir = path.Join(kubeletRootDir, "device-plugins")
+	}
+
 	watcherMode := detectPluginWatchMode(activeSockDir)
 	if watcherMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
