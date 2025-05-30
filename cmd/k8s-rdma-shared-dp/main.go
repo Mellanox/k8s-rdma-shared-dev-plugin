@@ -118,17 +118,19 @@ func main() {
 	signalsNotifier := resources.NewSignalNotifier(syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	sigs := signalsNotifier.Notify()
 
-	s := <-sigs
-	switch s {
-	case syscall.SIGHUP:
-		log.Println("Received SIGHUP, restarting.")
-		if err := rm.RestartAllServers(); err != nil {
-			log.Fatalf("unable to restart server %v", err)
+	for {
+		s := <-sigs
+		switch s {
+		case syscall.SIGHUP:
+			log.Println("Received SIGHUP, restarting.")
+			if err := rm.RestartAllServers(); err != nil {
+				log.Fatalf("unable to restart server %v", err)
+			}
+		default:
+			log.Printf("Received signal \"%v\", shutting down.", s)
+			stopPeriodicUpdate()
+			_ = rm.StopAllServers()
+			return
 		}
-	default:
-		log.Printf("Received signal \"%v\", shutting down.", s)
-		stopPeriodicUpdate()
-		_ = rm.StopAllServers()
-		return
 	}
 }
