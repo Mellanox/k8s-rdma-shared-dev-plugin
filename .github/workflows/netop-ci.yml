@@ -1,0 +1,19 @@
+name: Fork CI
+
+on:
+  push:
+    tags:
+      - network-operator-*
+
+jobs:
+  call-reusable-ci-fork-workflow:
+    uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/fork-ci-reusable.yml@main
+    with:
+      registry-internal: nvcr.io/nvstaging/mellanox
+      service-account-username: nvidia-ci-cd
+      service-account-email: svc-cloud-orch-gh@nvidia.com
+      components: '[{"name": "RdmaSharedDevicePlugin", "imageName": "k8s-rdma-shared-dev-plugin", "Dockerfile": "Dockerfile"}]'
+    secrets:
+      registry-username: ${{ secrets.NVCR_USERNAME }}
+      registry-token: ${{ secrets.NVCR_TOKEN }}
+      cicd-gh-token: ${{ secrets.GH_TOKEN_NVIDIA_CI_CD }}
