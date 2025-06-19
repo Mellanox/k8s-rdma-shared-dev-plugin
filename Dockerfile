@@ -30,6 +30,9 @@ FROM nvcr.io/nvidia/doca/doca:3.0.0-base-rt-host
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 COPY . /src
 
+RUN apt-get update && apt-get install -y --no-install-recommends kmod=29-1ubuntu1 && \
+    rm -rf /var/lib/apt/lists/*
+
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"
 
 CMD ["/bin/k8s-rdma-shared-dp"]
