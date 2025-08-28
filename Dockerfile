@@ -26,7 +26,7 @@ WORKDIR /usr/src/k8s-rdma-shared-dp
 RUN make clean && \
     make build
 
-FROM nvcr.io/nvidia/doca/doca:3.0.0-base-rt-host
+FROM nvcr.io/nvidia/doca/doca:3.1.0-base-rt-host
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 COPY . /src
 
