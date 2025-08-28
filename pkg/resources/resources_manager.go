@@ -91,7 +91,7 @@ type resourceManager struct {
 }
 
 func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
-	return NewResourceManagerWithPluginMode(configFile, useCdi, true)
+	return NewResourceManagerWithPluginMode(configFile, useCdi, detectPluginWatchMode(activeSockDir))
 }
 
 func NewResourceManagerWithPluginMode(configFile string, useCdi, pluginMode bool) types.ResourceManager {
