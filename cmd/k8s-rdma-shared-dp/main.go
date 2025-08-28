@@ -83,7 +83,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager(configFilePath, useCdi, pluginMode)
+	rm := resources.NewResourceManagerWithPluginMode(configFilePath, useCdi, pluginMode)
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {

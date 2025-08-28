@@ -90,7 +90,11 @@ type resourceManager struct {
 	useCdi                 bool
 }
 
-func NewResourceManager(configFile string, useCdi, pluginMode bool) types.ResourceManager {
+func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
+	return NewResourceManagerWithPluginMode(configFile, useCdi, true)
+}
+
+func NewResourceManagerWithPluginMode(configFile string, useCdi, pluginMode bool) types.ResourceManager {
 	if pluginMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
 	} else {
