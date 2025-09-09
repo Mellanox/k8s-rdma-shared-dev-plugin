@@ -18,6 +18,9 @@ FROM golang:alpine as builder
 
 COPY . /usr/src/k8s-rdma-shared-dp
 
+ARG GOPROXY
+ENV GOPROXY=$GOPROXY
+
 ENV HTTP_PROXY $http_proxy
 ENV HTTPS_PROXY $https_proxy
 
