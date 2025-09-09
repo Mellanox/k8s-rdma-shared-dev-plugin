@@ -17,3 +17,4 @@ jobs:
       registry-username: ${{ secrets.NVCR_USERNAME }}
       registry-token: ${{ secrets.NVCR_TOKEN }}
       cicd-gh-token: ${{ secrets.GH_TOKEN_NVIDIA_CI_CD }}
+      goproxy: ${{ secrets.GO_PROXY_URL }}

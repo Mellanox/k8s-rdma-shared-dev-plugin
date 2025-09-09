@@ -40,6 +40,7 @@ GOLANGCI_LINT = $(BINDIR)/golangci-lint
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
 GOLANGCI_LINT_VER = v1.62.2
+GOPROXY ?= $(shell go env GOPROXY)
 TIMEOUT = 20
 Q = $(if $(filter 1,$V),,@)
 
@@ -109,7 +110,7 @@ test-coverage: test-coverage-tools | ; $(info  running coverage tests...) @ ## R
 # Container image
 .PHONY: image ubi-image
 image: | ; $(info Building Docker image...)  ## Build conatiner image
-	$(IMAGE_BUILDER) build --progress=plain -t $(TAG) -f $(DOCKERFILE)  $(CURDIR) $(IMAGE_BUILD_OPTS)
+	$(IMAGE_BUILDER) build --progress=plain -t $(TAG) -f $(DOCKERFILE) GOPROXY="$(GOPROXY)"  $(CURDIR) $(IMAGE_BUILD_OPTS)
 
 ubi-image: DOCKERFILE=$(CURDIR)/Dockerfile.ubi
 ubi-image: TAG=mellanox/k8s-rdma-shared-dev-plugin-ubi
