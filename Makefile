@@ -110,7 +110,7 @@ test-coverage: test-coverage-tools | ; $(info  running coverage tests...) @ ## R
 # Container image
 .PHONY: image ubi-image
 image: | ; $(info Building Docker image...)  ## Build conatiner image
-	$(IMAGE_BUILDER) build --progress=plain -t $(TAG) -f $(DOCKERFILE) GOPROXY="$(GOPROXY)"  $(CURDIR) $(IMAGE_BUILD_OPTS)
+	$(IMAGE_BUILDER) build --progress=plain -t $(TAG) -f $(DOCKERFILE) --build-arg GOPROXY="$(GOPROXY)"  $(CURDIR) $(IMAGE_BUILD_OPTS)
 
 ubi-image: DOCKERFILE=$(CURDIR)/Dockerfile.ubi
 ubi-image: TAG=mellanox/k8s-rdma-shared-dev-plugin-ubi

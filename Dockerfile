@@ -29,12 +29,25 @@ WORKDIR /usr/src/k8s-rdma-shared-dp
 RUN make clean && \
     make build
 
-FROM nvcr.io/nvidia/doca/doca:3.1.0-base-rt-host
+FROM alpine:3 AS pkgs
+RUN apk add --no-cache hwdata-pci=0.395-r0 kmod=34.2-r0
+
+
+FROM nvcr.io/nvidia/distroless/go:v3.1.12-dev
+
+# hadolint ignore=DL3002
+USER 0:0
+
+SHELL ["/busybox/sh", "-c"]
+# hadolint ignore=DL4005
+RUN ln -s /busybox/sh /bin/sh
+
 COPY --from=builder /usr/src/k8s-rdma-shared-dp/build/k8s-rdma-shared-dp /bin/
 COPY . /src
 
-RUN apt-get update && apt-get install -y --no-install-recommends kmod=29-1ubuntu1 && \
-    rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /usr/share/hwdata
+COPY --from=pkgs /usr/share/hwdata/pci.ids /usr/share/hwdata/pci.ids
+COPY --from=pkgs /sbin/lsmod /sbin/lsmod
 
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"
 
