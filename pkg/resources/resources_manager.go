@@ -91,17 +91,20 @@ type resourceManager struct {
 }
 
 func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
-	watcherMode := detectPluginWatchMode(activeSockDir)
-	if watcherMode {
+	return NewResourceManagerWithPluginMode(configFile, useCdi, detectPluginWatchMode(activeSockDir))
+}
+
+func NewResourceManagerWithPluginMode(configFile string, useCdi, pluginMode bool) types.ResourceManager {
+	if pluginMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
 	} else {
-		fmt.Println("Using Deprecated Devie Plugin Registry Path")
+		fmt.Println("Using Deprecated Device Plugin Registry Path")
 	}
 	return &resourceManager{
 		configFile:            configFile,
 		defaultResourcePrefix: rdmaHcaResourcePrefix,
 		socketSuffix:          socketSuffix,
-		watchMode:             watcherMode,
+		watchMode:             pluginMode,
 		netlinkManager:        &netlinkManager{},
 		rds:                   NewRdmaDeviceSpec(requiredRdmaDevices),
 		useCdi:                useCdi,
