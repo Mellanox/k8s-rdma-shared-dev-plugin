@@ -97,6 +97,31 @@ var _ = Describe("ResourcesManger", func() {
 			Expect(rm.watchMode).To(Equal(false))
 		})
 	})
+	Context("getSocketDir", func() {
+		It("returns environment variable when DP_SOCK_PATH is set", func() {
+			customPath := "/custom/socket/path"
+			os.Setenv("DP_SOCK_PATH", customPath)
+			defer os.Unsetenv("DP_SOCK_PATH")
+
+			result := getSocketDir("/default/path")
+			Expect(result).To(Equal(customPath))
+		})
+		It("returns default path when DP_SOCK_PATH is not set", func() {
+			os.Unsetenv("DP_SOCK_PATH")
+			defaultPath := "/default/path"
+
+			result := getSocketDir(defaultPath)
+			Expect(result).To(Equal(defaultPath))
+		})
+		It("returns environment variable even when it's empty string", func() {
+			os.Setenv("DP_SOCK_PATH", "")
+			defer os.Unsetenv("DP_SOCK_PATH")
+			defaultPath := "/default/path"
+
+			result := getSocketDir(defaultPath)
+			Expect(result).To(Equal(defaultPath))
+		})
+	})
 	//nolint:dupl
 	Context("ReadConfig", func() {
 		It("Read valid config file with non default periodic update", func() {
