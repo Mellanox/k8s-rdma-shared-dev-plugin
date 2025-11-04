@@ -14,6 +14,8 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+ARG BASE_IMAGE_GO_DISTROLESS_DEV
+
 FROM golang:alpine as builder
 
 COPY . /usr/src/k8s-rdma-shared-dp
@@ -33,7 +35,7 @@ FROM alpine:3 AS pkgs
 RUN apk add --no-cache hwdata-pci=0.395-r0 kmod=34.2-r0
 
 
-FROM nvcr.io/nvidia/distroless/go:v3.2.0-dev
+FROM ${BASE_IMAGE_GO_DISTROLESS_DEV:-nvcr.io/nvidia/distroless/go:v3.2.1-dev}
 
 # hadolint ignore=DL3002
 USER 0:0
