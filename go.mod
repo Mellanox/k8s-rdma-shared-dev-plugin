@@ -5,7 +5,7 @@ go 1.24.0
 require (
 	github.com/Mellanox/rdmamap v1.1.0
 	github.com/container-orchestrated-devices/container-device-interface v0.5.4
-	github.com/jaypipes/ghw v0.19.1
+	github.com/jaypipes/ghw v0.20.0
 	github.com/jaypipes/pcidb v1.1.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.38.2
