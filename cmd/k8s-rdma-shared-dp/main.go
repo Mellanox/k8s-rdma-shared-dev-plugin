@@ -68,6 +68,9 @@ func main() {
 	useCdi := false
 	flag.BoolVar(&useCdi, "use-cdi", false,
 		"Use Container Device Interface to expose devices in containers")
+	kubeletPluginMode := false
+	flag.BoolVar(&kubeletPluginMode, "kubelet-plugin-mode", true,
+		"Using Kubelet Plugin Registry Mode if true, else to using Deprecated Device Plugin Registry Path ")
 	flag.Parse()
 	if versionOpt {
 		fmt.Printf("%s\n", printVersionString())
@@ -80,7 +83,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager(configFilePath, useCdi)
+	rm := resources.NewResourceManager(configFilePath, useCdi, kubeletPluginMode)
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {

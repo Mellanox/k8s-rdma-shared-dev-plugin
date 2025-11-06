@@ -90,18 +90,17 @@ type resourceManager struct {
 	useCdi                 bool
 }
 
-func NewResourceManager(configFile string, useCdi bool) types.ResourceManager {
-	watcherMode := detectPluginWatchMode(activeSockDir)
-	if watcherMode {
+func NewResourceManager(configFile string, useCdi, kubeletPluginMode bool) types.ResourceManager {
+	if kubeletPluginMode {
 		fmt.Println("Using Kubelet Plugin Registry Mode")
 	} else {
-		fmt.Println("Using Deprecated Devie Plugin Registry Path")
+		fmt.Println("Using Deprecated Device Plugin Registry Path")
 	}
 	return &resourceManager{
 		configFile:            configFile,
 		defaultResourcePrefix: rdmaHcaResourcePrefix,
 		socketSuffix:          socketSuffix,
-		watchMode:             watcherMode,
+		watchMode:             kubeletPluginMode,
 		netlinkManager:        &netlinkManager{},
 		rds:                   NewRdmaDeviceSpec(requiredRdmaDevices),
 		useCdi:                useCdi,
