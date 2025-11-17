@@ -53,4 +53,4 @@ COPY --from=pkgs /sbin/lsmod /sbin/lsmod
 
 LABEL io.k8s.display-name="RDMA Shared Device Plugin"
 
-CMD ["/bin/k8s-rdma-shared-dp"]
+ENTRYPOINT ["/bin/k8s-rdma-shared-dp"]
