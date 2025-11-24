@@ -13,7 +13,7 @@ jobs:
         with:
           go-version: '1.24.x'
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: lint
         run: make lint
   test:
@@ -27,7 +27,7 @@ jobs:
         with:
           go-version: '1.24.x'
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: install hwdata -yq
         run: sudo apt-get install hwdata -yq
       - name: test
@@ -43,6 +43,6 @@ jobs:
         with:
           go-version: '1.24.x'
       - name: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: build
         run: make build
