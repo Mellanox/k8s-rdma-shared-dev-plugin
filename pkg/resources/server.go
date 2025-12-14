@@ -44,7 +44,8 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/net/context"
+	"context"
+
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
