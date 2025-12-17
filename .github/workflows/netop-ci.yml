@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - network-operator-*
+    branches:
+      - network-operator-*
 
 jobs:
   call-reusable-ci-fork-workflow:
