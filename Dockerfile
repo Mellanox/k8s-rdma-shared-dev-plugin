@@ -32,7 +32,7 @@ RUN make clean && \
     make build
 
 FROM alpine:3 AS pkgs
-RUN apk add --no-cache hwdata-pci=0.395-r0 kmod=34.2-r0
+RUN apk add --no-cache hwdata-pci=0.401-r0 kmod=34.2-r1
 
 
 FROM ${BASE_IMAGE_GO_DISTROLESS_DEV:-nvcr.io/nvidia/distroless/go:v3.2.1-dev}
