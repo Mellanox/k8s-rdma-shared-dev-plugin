@@ -80,7 +80,7 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager(DefaultConfigFilePath, false)
+			obj := NewResourceManager(DefaultConfigFilePath, false, true)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(true))
 		})
@@ -92,7 +92,7 @@ var _ = Describe("ResourcesManger", func() {
 				activeSockDir = activeSockDirBackUP
 			}()
 
-			obj := NewResourceManager(DefaultConfigFilePath, false)
+			obj := NewResourceManager(DefaultConfigFilePath, false, true)
 			rm := obj.(*resourceManager)
 			Expect(rm.watchMode).To(Equal(false))
 		})
