@@ -26,13 +26,15 @@ ENV GOPROXY=$GOPROXY
 ENV HTTP_PROXY $http_proxy
 ENV HTTPS_PROXY $https_proxy
 
-RUN apk add --no-cache --virtual build-base=0.5-r3 linux-headers=5.19.5-r0
+# hadolint ignore=DL3018
+RUN apk add --no-cache build-base linux-headers
 WORKDIR /usr/src/k8s-rdma-shared-dp
 RUN make clean && \
     make build
 
 FROM alpine:3 AS pkgs
-RUN apk add --no-cache hwdata-pci=0.395-r0 kmod=34.2-r0
+# hadolint ignore=DL3018
+RUN apk add --no-cache hwdata-pci kmod
 
 
 FROM ${BASE_IMAGE_GO_DISTROLESS_DEV:-nvcr.io/nvidia/distroless/go:v3.2.1-dev}
