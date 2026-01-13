@@ -39,9 +39,11 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"sync"
+
 	"time"
 
 	"context"
@@ -67,15 +69,17 @@ type resourcesServerPort struct {
 }
 
 type resourceServer struct {
-	resourceName   string
-	watchMode      bool
-	socketName     string
-	socketPath     string
-	stopWatcher    chan bool
-	updateResource chan bool
-	health         chan *pluginapi.Device
-	rsConnector    types.ResourceServerPort
-	rdmaHcaMax     int
+	activeSockDir     string
+	deprecatedSockDir string
+	resourceName      string
+	watchMode         bool
+	socketName        string
+	socketPath        string
+	stopWatcher       chan bool
+	updateResource    chan bool
+	health            chan *pluginapi.Device
+	rsConnector       types.ResourceServerPort
+	rdmaHcaMax        int
 	// Mutex protects devs and deviceSpec
 	mutex           sync.RWMutex
 	devs            []*pluginapi.Device
@@ -136,11 +140,17 @@ func (rsc *resourcesServerPort) GetClientConn(unixSocketPath string) (*grpc.Clie
 }
 
 // newResourceServer returns an initialized server
-func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, watcherMode bool,
-	socketSuffix string, useCdi bool) (types.ResourceServer, error) {
+func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, kubeletRootDir string, watcherMode, useCdi bool) (types.ResourceServer, error) {
+	var activeSockDir, deprecatedSockDir string
 	var devs []*pluginapi.Device
 
-	sockDir := activeSockDir
+	if watcherMode {
+		activeSockDir = path.Join(kubeletRootDir, kubeletPluginRegistry)
+		fmt.Printf("Using watch mode with socket directory: %s\n", activeSockDir)
+	} else {
+		deprecatedSockDir = path.Join(kubeletRootDir, deprecatedPluginRegistry)
+		fmt.Printf("Using deprecated mode with socket directory: %s\n", deprecatedSockDir)
+	}
 
 	if config.RdmaHcaMax < 0 {
 		return nil, fmt.Errorf("error: Invalid value for rdmaHcaMax < 0: %d", config.RdmaHcaMax)
@@ -164,28 +174,26 @@ func newResourceServer(config *types.UserConfig, devices []types.PciNetDevice, w
 		log.Printf("Warning: no Rdma Devices were found for resource %s\n", config.ResourceName)
 	}
 
-	if !watcherMode {
-		sockDir = deprecatedSockDir
-	}
-
 	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
 
 	return &resourceServer{
-		resourceName:    fmt.Sprintf("%s/%s", config.ResourcePrefix, config.ResourceName),
-		socketName:      socketName,
-		socketPath:      filepath.Join(sockDir, socketName),
-		watchMode:       watcherMode,
-		devs:            devs,
-		deviceSpec:      deviceSpec,
-		stopWatcher:     make(chan bool),
-		updateResource:  make(chan bool, 1),
-		health:          make(chan *pluginapi.Device),
-		rsConnector:     &resourcesServerPort{},
-		rdmaHcaMax:      config.RdmaHcaMax,
-		pciDevices:      devices,
-		useCdi:          useCdi,
-		cdi:             cdi.New(),
-		cdiResourceName: config.ResourceName,
+		activeSockDir:     activeSockDir,
+		deprecatedSockDir: deprecatedSockDir,
+		resourceName:      fmt.Sprintf("%s/%s", config.ResourcePrefix, config.ResourceName),
+		socketName:        socketName,
+		socketPath:        filepath.Join(activeSockDir, socketName),
+		watchMode:         watcherMode,
+		devs:              devs,
+		deviceSpec:        deviceSpec,
+		stopWatcher:       make(chan bool),
+		updateResource:    make(chan bool, 1),
+		health:            make(chan *pluginapi.Device),
+		rsConnector:       &resourcesServerPort{},
+		rdmaHcaMax:        config.RdmaHcaMax,
+		pciDevices:        devices,
+		useCdi:            useCdi,
+		cdi:               cdi.New(),
+		cdiResourceName:   config.ResourceName,
 	}, nil
 }
 
@@ -291,7 +299,7 @@ func (rs *resourceServer) Watch() {
 
 // Register registers the device plugin for the given resourceName with Kubelet.
 func (rs *resourceServer) register() error {
-	kubeletEndpoint := filepath.Join(deprecatedSockDir, kubeEndPoint)
+	kubeletEndpoint := filepath.Join(rs.deprecatedSockDir, kubeEndPoint)
 	conn, err := rs.rsConnector.GetClientConn(kubeletEndpoint)
 	if err != nil {
 		return err
@@ -438,7 +446,7 @@ func (rs *resourceServer) GetInfo(_ context.Context, _ *registerapi.InfoRequest)
 	pluginInfoResponse := &registerapi.PluginInfo{
 		Type:              registerapi.DevicePlugin,
 		Name:              rs.resourceName,
-		Endpoint:          filepath.Join(activeSockDir, rs.socketName),
+		Endpoint:          filepath.Join(rs.activeSockDir, rs.socketName),
 		SupportedVersions: []string{"v1alpha1", "v1beta1"},
 	}
 	return pluginInfoResponse, nil
