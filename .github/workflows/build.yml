@@ -12,6 +12,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: '1.24.x'
+          check-latest: true
       - name: checkout
         uses: actions/checkout@v6
       - name: lint
@@ -26,6 +27,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: '1.24.x'
+          check-latest: true
       - name: checkout
         uses: actions/checkout@v6
       - name: install hwdata -yq
@@ -42,6 +44,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: '1.24.x'
+          check-latest: true
       - name: checkout
         uses: actions/checkout@v6
       - name: build

@@ -37,7 +37,7 @@ FROM alpine:3 AS pkgs
 RUN apk add --no-cache hwdata-pci kmod
 
 
-FROM ${BASE_IMAGE_GO_DISTROLESS_DEV:-nvcr.io/nvidia/distroless/go:v3.2.1-dev}
+FROM ${BASE_IMAGE_GO_DISTROLESS_DEV:-nvcr.io/nvidia/distroless/go:v4.0.1-dev}
 
 # hadolint ignore=DL3002
 USER 0:0
