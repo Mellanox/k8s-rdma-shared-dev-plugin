@@ -51,6 +51,14 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/utils"
 )
 
+// getSocketDir returns the socket directory path, checking environment variable first
+func getSocketDir(defaultPath string) string {
+	if envPath := os.Getenv("DP_SOCK_PATH"); envPath != "" {
+		return envPath
+	}
+	return defaultPath
+}
+
 const (
 	// General constants
 	DefaultConfigFilePath = "/k8s-rdma-shared-dev-plugin/config.json"
@@ -71,8 +79,8 @@ const (
 )
 
 var (
-	activeSockDir     = "/var/lib/kubelet/plugins_registry"
-	deprecatedSockDir = "/var/lib/kubelet/device-plugins"
+	activeSockDir     = getSocketDir("/var/lib/kubelet/plugins_registry")
+	deprecatedSockDir = getSocketDir("/var/lib/kubelet/device-plugins")
 )
 
 // resourceManager for plugin
