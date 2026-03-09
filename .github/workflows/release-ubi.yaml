@@ -30,7 +30,7 @@ jobs:
           images: mellanox/k8s-rdma-shared-dev-plugin-ubi
 
       - name: Build and push UBI Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
