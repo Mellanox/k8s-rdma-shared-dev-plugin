@@ -1,101 +1,107 @@
-linters-settings:
-  dupl:
-    threshold: 150
-  funlen:
-    lines: 100
-    statements: 50
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-      - unnamedResult
-  gocognit:
-    min-complexity: 30
-  goimports:
-    local-prefixes: github.com/Mellanox/k8s-rdma-shared-dev-plugin
-  gomnd:
-    settings:
-      mnd:
-        # don't include the "operation" and "assign"
-        checks: [argument,case,condition,return]
-  govet:
-    shadow: true
-    settings:
-      printf:
-        funcs:
-          - (github.com/rs/zerolog/zerolog.Event).Msgf
-  lll:
-    line-length: 120
-  misspell:
-    locale: US
-  prealloc:
-    # Report preallocation suggestions only on simple loops that have no returns/breaks/continues/gotos in them.
-    # True by default.
-    simple: true
-    range-loops: true # Report preallocation suggestions on range loops, true by default
-    for-loops: false # Report preallocation suggestions on for loops, false by default
+version: "2"
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - bodyclose
+    - copyloopvar
     - dogsled
     - dupl
     - errcheck
-    - copyloopvar
     - funlen
     - gochecknoinits
     - goconst
     - gocritic
     - gocognit
-    - gofmt
-    - goimports
-    - mnd
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
+    - mnd
     - nakedret
     - prealloc
     - revive
     - rowserrcheck
     - staticcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
     - whitespace
+  settings:
+    dupl:
+      threshold: 150
+    funlen:
+      lines: 100
+      statements: 50
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+        - unnamedResult
+    gocognit:
+      min-complexity: 30
+    govet:
+      enable:
+        - shadow
+      settings:
+        printf:
+          funcs:
+            - (github.com/rs/zerolog/zerolog.Event).Msgf
+    lll:
+      line-length: 120
+    misspell:
+      locale: US
+    mnd:
+      checks:
+        - argument
+        - case
+        - condition
+        - return
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters:
+          - goconst
+          - dupl
+          - revive
+        text: "should not use dot imports"
+      - path: _test\.go
+        linters:
+          - mnd
+          - goconst
+          - prealloc
+      - text: "Magic number: 1"
+        linters:
+          - mnd
 
-issues:
-  # Excluding configuration per-path, per-linter, per-text and per-source
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - goconst
-        - dupl
-        - revive
-        - stylecheck
-      text: "should not use dot imports"
-    - path: _test\.go
-      linters:
-        - mnd
-        - goconst
-    - text: "Magic number: 1"
-      linters:
-        - mnd
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/Mellanox/k8s-rdma-shared-dev-plugin
