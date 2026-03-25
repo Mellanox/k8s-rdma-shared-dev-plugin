@@ -38,7 +38,7 @@ type FakeFilesystem struct {
 
 // Use function creates entire files structure and returns a function to tear it down. Example usage: defer fs.Use()()
 //
-//nolint:gomnd
+//nolint:mnd,gosec
 func (fs *FakeFilesystem) Use() func() {
 	// create the new fake fs root dir in /tmp/sriov...
 	tmpDir, err := os.MkdirTemp("", "k8s-rdma-shared-dev-plugin-")

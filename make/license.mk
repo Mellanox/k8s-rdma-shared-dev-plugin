@@ -55,7 +55,7 @@ go-licenses: $(BIN_DIR)
 .PHONY: third-party-licenses
 third-party-licenses: go-licenses
 	@echo "Collecting third-party licenses..."
-	@$(GO_LICENSES) save ./... --save_path=third_party_licenses
+	@GOROOT=$(shell go env GOROOT) $(GO_LICENSES) save ./... --save_path=third_party_licenses
 	@echo "Generating THIRD_PARTY_NOTICES..."
 	@find third_party_licenses -type f -iname "LICENSE*" | sort --ignore-case | while read -r license; do \
 		echo "---"; \

@@ -39,7 +39,7 @@ GOLANGCI_LINT = $(BINDIR)/golangci-lint
 # golangci-lint version should be updated periodically
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
-GOLANGCI_LINT_VER = v1.62.2
+GOLANGCI_LINT_VER = v2.11.4
 GOPROXY ?= $(shell go env GOPROXY)
 TIMEOUT = 20
 Q = $(if $(filter 1,$V),,@)
@@ -61,7 +61,7 @@ $(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
 
 # Tools
 $(GOLANGCI_LINT): | $(BINDIR) ; $(info  installing golangci-lint...)
-	$Q GOBIN=$(BINDIR) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VER)
+	$Q GOBIN=$(BINDIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VER)
 
 GOVERALLS = $(BINDIR)/goveralls
 $(GOVERALLS): | $(BINDIR) ; $(info  installing goveralls...)

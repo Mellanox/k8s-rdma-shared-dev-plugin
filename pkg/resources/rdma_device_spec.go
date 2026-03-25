@@ -39,9 +39,8 @@ func NewRdmaDeviceSpec(rdmaDevs []string) types.RdmaDeviceSpec {
 }
 
 func (rf *rdmaDeviceSpec) Get(pciAddress string) []*pluginapi.DeviceSpec {
-	deviceSpec := make([]*pluginapi.DeviceSpec, 0)
-
 	rdmaDevices := utils.GetRdmaDevices(pciAddress)
+	deviceSpec := make([]*pluginapi.DeviceSpec, 0, len(rdmaDevices))
 	for _, device := range rdmaDevices {
 		deviceSpec = append(deviceSpec, &pluginapi.DeviceSpec{
 			HostPath:      device,
