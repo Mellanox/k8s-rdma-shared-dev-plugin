@@ -459,6 +459,37 @@ var _ = Describe("resourceServer tests", func() {
 			err := rs.ListAndWatch(nil, s)
 			Expect(err).ToNot(HaveOccurred())
 		})
+		It("Restart server when ListAndWatch stream is closed unexpectedly", func() {
+			grpcServer := grpc.NewServer([]grpc.ServerOption{}...)
+			restarted := make(chan struct{})
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
+			rsc.On("GetServer").Return(grpcServer)
+			rsc.On("Stop").Return()
+			rsc.On("DeleteServer").Return()
+			rsc.On("CreateServer").Return()
+			rsc.On("Listen", "unix", "fake.sock").Return(nil, nil)
+			rsc.On("Serve", mock.Anything).Return()
+			rsc.On("GetClientConn", "fake.sock").Return(nil, nil)
+			rsc.On("Close", mock.Anything).Run(func(_ mock.Arguments) {
+				close(restarted)
+			}).Return()
+
+			rs := resourceServer{
+				resourceName: "fake",
+				socketName:   "fake.sock",
+				socketPath:   "fake.sock",
+				rsConnector:  rsc,
+			}
+			s := &devPluginListAndWatchServerMock{}
+			ctx, cancel := context.WithCancel(context.Background())
+			s.SetContext(ctx)
+			cancel()
+
+			err := rs.ListAndWatch(nil, s)
+			Expect(err).ToNot(HaveOccurred())
+			Eventually(restarted).Should(BeClosed())
+			rsc.AssertExpectations(testCallsAssertionReporter)
+		})
 	})
 	Context("Allocate", func() {
 		It("Allocate resource", func() {

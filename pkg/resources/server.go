@@ -76,8 +76,9 @@ type resourceServer struct {
 	health         chan *pluginapi.Device
 	rsConnector    types.ResourceServerPort
 	rdmaHcaMax     int
-	// Mutex protects devs and deviceSpec
+	// Mutex protects lifecycle state, devs, and deviceSpec
 	mutex           sync.RWMutex
+	stopping        bool
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
 	pciDevices      []types.PciNetDevice
@@ -198,6 +199,7 @@ func detectPluginWatchMode(sockDir string) bool {
 
 // Start starts the gRPC server of the device plugin
 func (rs *resourceServer) Start() error {
+	rs.setStopping(false)
 	_ = rs.cleanup()
 	log.Printf("starting %s device plugin endpoint at: %s\n", rs.resourceName, rs.socketName)
 	rs.rsConnector.CreateServer()
@@ -235,6 +237,7 @@ func (rs *resourceServer) Start() error {
 // Stop stops the gRPC server
 func (rs *resourceServer) Stop() error {
 	log.Printf("stopping %s device plugin server...", rs.resourceName)
+	rs.setStopping(true)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return nil
 	}
@@ -261,6 +264,29 @@ func (rs *resourceServer) Restart() error {
 	rs.rsConnector.DeleteServer()
 
 	return rs.Start()
+}
+
+func (rs *resourceServer) setStopping(stopping bool) {
+	rs.mutex.Lock()
+	defer rs.mutex.Unlock()
+	rs.stopping = stopping
+}
+
+func (rs *resourceServer) isStopping() bool {
+	rs.mutex.RLock()
+	defer rs.mutex.RUnlock()
+	return rs.stopping
+}
+
+func (rs *resourceServer) restartAfterListAndWatchClose() {
+	if rs.isStopping() {
+		return
+	}
+	go func() {
+		if err := rs.Restart(); err != nil {
+			log.Printf("error: unable to restart server after ListAndWatch stream closed: %v", err)
+		}
+	}()
 }
 
 // Watch for Kubelet socket file; if not present restart server
@@ -330,6 +356,7 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 		select {
 		case <-s.Context().Done():
 			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
+			rs.restartAfterListAndWatchClose()
 			return nil
 		case d := <-rs.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
