@@ -54,21 +54,21 @@ func printVersionString() string {
 	return fmt.Sprintf("k8s-rdma-shared-dev-plugin version:%s, commit:%s, date:%s", version, commit, date)
 }
 
-func main() {
+func parseFlags() (versionOpt bool, configFilePath, kubeletRootDir string, useCdi bool) {
 	// Init command line flags to clear vendor packages' flags, especially in init()
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
-
-	// add version flag
-	versionOpt := false
-	var configFilePath string
 	flag.BoolVar(&versionOpt, "version", false, "Show application version")
 	flag.BoolVar(&versionOpt, "v", false, "Show application version")
 	flag.StringVar(
 		&configFilePath, "config-file", resources.DefaultConfigFilePath, "path to device plugin config file")
-	useCdi := false
-	flag.BoolVar(&useCdi, "use-cdi", false,
-		"Use Container Device Interface to expose devices in containers")
+	flag.StringVar(&kubeletRootDir, "kubelet-root-dir", "/var/lib/kubelet", "root directory of kubelet")
+	flag.BoolVar(&useCdi, "use-cdi", false, "Use Container Device Interface to expose devices in containers")
 	flag.Parse()
+	return
+}
+
+func main() {
+	versionOpt, configFilePath, kubeletRootDir, useCdi := parseFlags()
 	if versionOpt {
 		fmt.Printf("%s\n", printVersionString())
 		return
@@ -80,7 +80,7 @@ func main() {
 
 	log.Println("Starting K8s RDMA Shared Device Plugin version=", version)
 
-	rm := resources.NewResourceManager(configFilePath, useCdi)
+	rm := resources.NewResourceManager(configFilePath, kubeletRootDir, useCdi)
 
 	log.Println("resource manager reading configs")
 	if err := rm.ReadConfig(); err != nil {
