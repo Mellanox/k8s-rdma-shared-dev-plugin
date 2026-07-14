@@ -5,7 +5,7 @@ on:
     tags:
       - network-operator-*
     branches:
-      - network-operator-*
+      - master
 
 jobs:
   call-reusable-ci-fork-workflow:
