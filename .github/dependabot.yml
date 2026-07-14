@@ -66,10 +66,6 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "k8s.io/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: '*'
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
     target-branch: network-operator-26.1.x
   # Docker images
   - package-ecosystem: "docker"
@@ -110,8 +106,4 @@ updates:
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
       - dependency-name: "k8s.io/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
-      - dependency-name: '*'
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
     target-branch: network-operator-26.4.x
