@@ -1,6 +1,6 @@
 module github.com/Mellanox/k8s-rdma-shared-dev-plugin
 
-go 1.24.11
+go 1.25.0
 
 require (
 	github.com/Mellanox/rdmamap v1.1.0
@@ -8,7 +8,7 @@ require (
 	github.com/jaypipes/ghw v0.21.2
 	github.com/jaypipes/pcidb v1.1.1
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.39.1
+	github.com/onsi/gomega v1.42.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.11.1
 	github.com/vishvananda/netlink v1.3.1
@@ -32,10 +32,10 @@ require (
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
