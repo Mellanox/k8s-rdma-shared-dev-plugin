@@ -3,7 +3,7 @@ module github.com/Mellanox/k8s-rdma-shared-dev-plugin
 go 1.25.0
 
 require (
-	github.com/Mellanox/rdmamap v1.1.0
+	github.com/Mellanox/rdmamap v1.2.0
 	github.com/container-orchestrated-devices/container-device-interface v0.5.4
 	github.com/jaypipes/ghw v0.21.2
 	github.com/jaypipes/pcidb v1.1.1
