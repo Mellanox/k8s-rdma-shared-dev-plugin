@@ -485,7 +485,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	deviceSpec := getDevicesSpec(devices)
 
 	// If not devices not changed skip
-	if !devicesChanged(rs.deviceSpec, deviceSpec) {
+	if !devicesChanged(rs.deviceSpec, deviceSpec) && (!rs.useCdi || !pciDevicesChanged(rs.pciDevices, devices)) {
 		log.Printf("no changes to devices for \"%s\"", rs.resourceName)
 		log.Printf("exposing \"%d\" devices", len(rs.devs))
 		return
@@ -538,6 +538,23 @@ func devicesChanged(deviceList, newDeviceList []*pluginapi.DeviceSpec) bool {
 		}
 	}
 
+	return false
+}
+
+// pciDevicesChanged compares the PCI addresses used in CDI device names.
+func pciDevicesChanged(devices, newDevices []types.PciNetDevice) bool {
+	if len(devices) != len(newDevices) {
+		return true
+	}
+	addresses := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		addresses[device.GetPciAddr()] = struct{}{}
+	}
+	for _, device := range newDevices {
+		if _, exists := addresses[device.GetPciAddr()]; !exists {
+			return true
+		}
+	}
 	return false
 }
 

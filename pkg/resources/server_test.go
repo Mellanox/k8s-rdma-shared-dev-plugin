@@ -571,7 +571,22 @@ var _ = Describe("resourceServer tests", func() {
 			Entry("when an empty pool gains a device", []types.PciNetDevice{}, initialCDIDevices),
 			Entry("when the pool becomes empty", initialCDIDevices, []types.PciNetDevice{}),
 			Entry("when a device is replaced", initialCDIDevices, replacementDevices),
+			Entry("when only the PCI address changes", initialCDIDevices, []types.PciNetDevice{&pciNetDevice{
+				pciAddress: "0000:03:00.0",
+				rdmaSpec:   fakeDeviceSpec,
+			}}),
 		)
+		It("does not update CDI devices when their order changes", func() {
+			devices := append(append([]types.PciNetDevice{}, initialCDIDevices...), replacementDevices...)
+			rs := &resourceServer{
+				updateResource: make(chan bool, 1),
+				deviceSpec:     getDevicesSpec(devices),
+				pciDevices:     devices,
+				useCdi:         true,
+			}
+			rs.UpdateDevices([]types.PciNetDevice{devices[1], devices[0]})
+			Expect(rs.updateResource).ToNot(Receive())
+		})
 		It("synchronizes CDI reads with device updates", func() {
 			cdi := &cdiMocks.CDI{}
 			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
