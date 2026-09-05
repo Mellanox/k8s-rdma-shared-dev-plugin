@@ -79,7 +79,7 @@ type resourceServer struct {
 	health            chan *pluginapi.Device
 	rsConnector       types.ResourceServerPort
 	rdmaHcaMax        int
-	// Mutex protects devs and deviceSpec
+	// Mutex protects devs, deviceSpec and pciDevices
 	mutex           sync.RWMutex
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
@@ -329,9 +329,7 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 		return err
 	}
 
-	rs.mutex.RLock()
 	err := rs.updateCDISpec()
-	rs.mutex.RUnlock()
 	if err != nil {
 		log.Printf("cannot update CDI specs: %v", err)
 		return err
@@ -363,6 +361,9 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 }
 
 func (rs *resourceServer) updateCDISpec() error {
+	rs.mutex.RLock()
+	defer rs.mutex.RUnlock()
+
 	// check if CDI mode is enabled
 	if !rs.useCdi {
 		return nil
@@ -491,6 +492,7 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	}
 
 	rs.deviceSpec = deviceSpec
+	rs.pciDevices = devices
 	needUpdate = true
 
 	// In case no RDMA resource report 0 resources
