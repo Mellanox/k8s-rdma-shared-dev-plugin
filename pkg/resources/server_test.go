@@ -42,6 +42,7 @@ import (
 	"sync"
 	"time"
 
+	cdiImpl "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi"
 	cdiMocks "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi/mocks"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types/mocks"
@@ -521,6 +522,92 @@ var _ = Describe("resourceServer tests", func() {
 		})
 	})
 	Context("UpdateDevices", func() {
+		initialCDIDevices := []types.PciNetDevice{&pciNetDevice{
+			pciAddress: "0000:02:00.0",
+			rdmaSpec:   fakeDeviceSpec,
+		}}
+		replacementDevices := []types.PciNetDevice{&pciNetDevice{
+			pciAddress: "0000:03:00.0",
+			rdmaSpec:   []*pluginapi.DeviceSpec{{HostPath: "replacement", ContainerPath: "replacement"}},
+		}}
+		DescribeTable("refreshes CDI devices",
+			func(initialDevices, updatedDevices []types.PciNetDevice) {
+				rs := &resourceServer{
+					updateResource:  make(chan bool, 1),
+					rdmaHcaMax:      10,
+					deviceSpec:      getDevicesSpec(initialDevices),
+					pciDevices:      initialDevices,
+					useCdi:          true,
+					cdiResourceName: "test_pool",
+				}
+				cdi := &cdiMocks.CDI{}
+				cdi.On("CreateCDISpec", cdiResourcePrefix, cdiResourceKind, "test_pool", updatedDevices).Return(nil)
+				rs.cdi = cdi
+
+				rs.UpdateDevices(updatedDevices)
+				Expect(len(rs.updateResource)).To(Equal(1))
+				<-rs.updateResource
+				rs.UpdateDevices(updatedDevices)
+				Expect(rs.updateResource).ToNot(Receive())
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				stream := &devPluginListAndWatchServerMock{ctx: ctx}
+				Expect(rs.ListAndWatch(nil, stream)).To(Succeed())
+				cdi.AssertExpectations(GinkgoT())
+				rs.cdi = cdiImpl.New()
+				response, err := rs.Allocate(context.Background(), &pluginapi.AllocateRequest{
+					ContainerRequests: []*pluginapi.ContainerAllocateRequest{{DevicesIDs: []string{"0"}}},
+				})
+				if len(updatedDevices) == 0 {
+					Expect(err).To(MatchError(ContainSubstring("devices list is empty")))
+					Expect(response).To(BeNil())
+				} else {
+					Expect(err).ToNot(HaveOccurred())
+					Expect(response.ContainerResponses[0].Annotations).To(Equal(map[string]string{
+						"cdi.k8s.io/nvidia.com_net-rdma": "nvidia.com/net-rdma=" + updatedDevices[0].GetPciAddr(),
+					}))
+				}
+			},
+			Entry("when an empty pool gains a device", []types.PciNetDevice{}, initialCDIDevices),
+			Entry("when the pool becomes empty", initialCDIDevices, []types.PciNetDevice{}),
+			Entry("when a device is replaced", initialCDIDevices, replacementDevices),
+			Entry("when only the PCI address changes", initialCDIDevices, []types.PciNetDevice{&pciNetDevice{
+				pciAddress: "0000:03:00.0",
+				rdmaSpec:   fakeDeviceSpec,
+			}}),
+		)
+		It("does not update CDI devices when their order changes", func() {
+			devices := append(append([]types.PciNetDevice{}, initialCDIDevices...), replacementDevices...)
+			rs := &resourceServer{
+				updateResource: make(chan bool, 1),
+				deviceSpec:     getDevicesSpec(devices),
+				pciDevices:     devices,
+				useCdi:         true,
+			}
+			rs.UpdateDevices([]types.PciNetDevice{devices[1], devices[0]})
+			Expect(rs.updateResource).ToNot(Receive())
+		})
+		It("synchronizes CDI reads with device updates", func() {
+			cdi := &cdiMocks.CDI{}
+			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			rs := &resourceServer{useCdi: true, cdi: cdi, updateResource: make(chan bool, 100)}
+			var wg sync.WaitGroup
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < 100; i++ {
+					if i%2 == 0 {
+						rs.UpdateDevices(fakeDeviceList)
+					} else {
+						rs.UpdateDevices(replacementDevices)
+					}
+				}
+			}()
+			for i := 0; i < 100; i++ {
+				Expect(rs.updateCDISpec()).To(Succeed())
+			}
+			wg.Wait()
+		})
 		It("should receive signal of updating resource", func() {
 			rs := &resourceServer{
 				updateResource: make(chan bool),
