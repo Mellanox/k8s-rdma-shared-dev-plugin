@@ -107,3 +107,27 @@ updates:
       - dependency-name: "k8s.io/*"
         update-types: ["version-update:semver-major", "version-update:semver-minor"]
     target-branch: network-operator-26.4.x
+  # Docker images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "chore:"
+    target-branch: network-operator-26.7.x
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    target-branch: network-operator-26.7.x
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+    groups:
+      kubernetes:
+        patterns: ["k8s.io/*"]
+    target-branch: network-operator-26.7.x
