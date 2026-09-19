@@ -38,8 +38,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
+	"os"
 	"path"
+	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	cdiMocks "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi/mocks"
@@ -744,6 +748,121 @@ var _ = Describe("resourceServer tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				wg.Wait()
 			})
+		})
+	})
+
+	Context("socket cleanup ownership", func() {
+		It("removes the socket on cleanup when this server still owns the path", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-own-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketID()
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketIno).To(BeZero())
+
+			_ = ln.Close()
+		})
+
+		It("does not remove a superseded socket owned by another instance", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-race-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			oldRS := &resourceServer{socketPath: sockPath}
+			oldRS.recordSocketID()
+			oldIno := oldRS.socketIno
+			Expect(oldIno).NotTo(BeZero())
+
+			// Replacement Start: reclaim pathname and bind a new socket (inode B).
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			newIno, newDev, err := socketFileID(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(newIno).NotTo(Equal(oldIno))
+
+			// Old Stop must not unlink the replacement's active socket.
+			err = oldRS.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oldRS.socketIno).To(BeZero())
+
+			fi, err := os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			st := fi.Sys().(*syscall.Stat_t)
+			Expect(st.Ino).To(Equal(newIno))
+			Expect(uint64(st.Dev)).To(Equal(newDev))
+
+			Expect(newLn.Close()).To(Succeed())
+			_ = oldLn.Close()
+		})
+
+		It("Start cleanup still reclaims a stale socket before Listen", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stale-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			stale, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// socketIno == 0: unconditional reclaim used by Start before Listen.
+			rs := &resourceServer{socketPath: sockPath}
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ln.Close()).To(Succeed())
+			_ = stale.Close()
+		})
+
+		It("updates ownership after rebind so Stop removes the new socket", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-rebind-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln1, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketID()
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			// Same-process Restart path: Start cleanup owns the old inode, then rebinds.
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rs.socketIno).To(BeZero())
+			_ = ln1.Close()
+
+			ln2, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			rs.recordSocketID()
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketIno).To(BeZero())
+			_ = ln2.Close()
 		})
 	})
 

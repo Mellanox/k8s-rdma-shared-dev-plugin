@@ -42,6 +42,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"time"
 
@@ -74,11 +75,16 @@ type resourceServer struct {
 	watchMode         bool
 	socketName        string
 	socketPath        string
-	stopWatcher       chan bool
-	updateResource    chan bool
-	health            chan *pluginapi.Device
-	rsConnector       types.ResourceServerPort
-	rdmaHcaMax        int
+	// socketIno/socketDev identify the Listen-created socket so Stop only
+	// unlinks the pathname when it still refers to this process's socket.
+	// Zero means no ownership recorded (Start stale reclaim uses force remove).
+	socketIno      uint64
+	socketDev      uint64
+	stopWatcher    chan bool
+	updateResource chan bool
+	health         chan *pluginapi.Device
+	rsConnector    types.ResourceServerPort
+	rdmaHcaMax     int
 	// Mutex protects devs and deviceSpec
 	mutex           sync.RWMutex
 	devs            []*pluginapi.Device
@@ -216,6 +222,7 @@ func (rs *resourceServer) Start() error {
 	if err != nil {
 		return err
 	}
+	rs.recordSocketID()
 
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
@@ -436,11 +443,62 @@ func (rs *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStart
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
+// recordSocketID stores the inode and device of the socket at socketPath after
+// a successful Listen so later cleanup can refuse to unlink a superseded path.
+func (rs *resourceServer) recordSocketID() {
+	ino, dev, err := socketFileID(rs.socketPath)
+	if err != nil {
+		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
+		rs.socketIno = 0
+		rs.socketDev = 0
+		return
+	}
+	rs.socketIno = ino
+	rs.socketDev = dev
+}
+
+func socketFileID(path string) (ino, dev uint64, err error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, 0, fmt.Errorf("unsupported stat type %T", fi.Sys())
+	}
+	return st.Ino, uint64(st.Dev), nil
+}
+
+// cleanup removes the registration socket pathname.
+// When socketIno is zero (before first successful Listen, or after identity was
+// cleared), removal is unconditional so Start can reclaim a stale sock.
+// When socketIno is set, the path is removed only if Lstat still names that
+// inode/dev, so a terminating overlapping instance cannot unlink a replacement's
+// active socket (see issue #319).
 func (rs *resourceServer) cleanup() error {
+	if rs.socketIno != 0 {
+		ino, dev, err := socketFileID(rs.socketPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				rs.socketIno = 0
+				rs.socketDev = 0
+				return nil
+			}
+			return err
+		}
+		if ino != rs.socketIno || dev != rs.socketDev {
+			log.Printf("skipping remove of %s: path no longer refers to this server's socket", rs.socketPath)
+			rs.socketIno = 0
+			rs.socketDev = 0
+			return nil
+		}
+	}
+
 	if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-
+	rs.socketIno = 0
+	rs.socketDev = 0
 	return nil
 }
 
