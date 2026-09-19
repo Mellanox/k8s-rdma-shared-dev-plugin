@@ -35,12 +35,14 @@
 package resources
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 
@@ -64,6 +66,16 @@ const (
 	cdiResourceKind   = "net-rdma"
 )
 
+// Socket ownership for registration path cleanup (issue #319).
+const (
+	// socketOwnerNone: no post-Listen ownership; Start reclaim force-removes.
+	socketOwnerNone uint8 = iota
+	// socketOwnerKnown: sockfs ino captured from the open listener.
+	socketOwnerKnown
+	// socketOwnerUnknown: Listen succeeded but capture failed; Stop must not remove.
+	socketOwnerUnknown
+)
+
 type resourcesServerPort struct {
 	server *grpc.Server
 }
@@ -75,18 +87,21 @@ type resourceServer struct {
 	watchMode         bool
 	socketName        string
 	socketPath        string
-	// socketIno/socketDev identify the Listen-created socket so Stop only
+	// socketOwner/socketIno identify the Listen-created socket so Stop only
 	// unlinks the pathname when it still refers to this process's socket.
-	// Zero means no ownership recorded (Start stale reclaim uses force remove).
+	// socketIno is the sockfs inode from the open listener (SyscallConn+Fstat),
+	// not Lstat on the shared path. See socketOwner* constants.
+	socketOwner    uint8
 	socketIno      uint64
-	socketDev      uint64
 	stopWatcher    chan bool
 	updateResource chan bool
 	health         chan *pluginapi.Device
 	rsConnector    types.ResourceServerPort
 	rdmaHcaMax     int
-	// Mutex protects devs and deviceSpec
-	mutex           sync.RWMutex
+	// mutex protects devs and deviceSpec
+	mutex sync.RWMutex
+	// lifecycleMu serializes Start/Stop/Restart and socket ownership cleanup
+	lifecycleMu sync.Mutex
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
 	pciDevices      []types.PciNetDevice
@@ -215,14 +230,22 @@ func detectPluginWatchMode(sockDir string) bool {
 
 // Start starts the gRPC server of the device plugin
 func (rs *resourceServer) Start() error {
-	_ = rs.cleanup()
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.startLocked()
+}
+
+func (rs *resourceServer) startLocked() error {
+	// Pre-listen reclaim: clear ownership so cleanup force-removes any stale sock.
+	rs.clearSocketOwnershipLocked()
+	_ = rs.cleanupLocked()
 	log.Printf("starting %s device plugin endpoint at: %s\n", rs.resourceName, rs.socketName)
 	rs.rsConnector.CreateServer()
 	sock, err := rs.rsConnector.Listen("unix", rs.socketPath)
 	if err != nil {
 		return err
 	}
-	rs.recordSocketID()
+	rs.recordSocketIDLocked(sock)
 
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
@@ -252,6 +275,12 @@ func (rs *resourceServer) Start() error {
 
 // Stop stops the gRPC server
 func (rs *resourceServer) Stop() error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.stopLocked()
+}
+
+func (rs *resourceServer) stopLocked() error {
 	log.Printf("stopping %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return nil
@@ -261,15 +290,28 @@ func (rs *resourceServer) Stop() error {
 		rs.stopWatcher <- true
 	}
 
+	// Decide path removal while the listen socket is still alive so sockfs
+	// ownership can be checked via /proc/net/unix. grpc Stop closes the listener.
+	removePath := rs.shouldRemoveSocketPathLocked()
+	rs.clearSocketOwnershipLocked()
+
 	// Note: stopping RPC server will cancel any outstanding ListAndWatch() calls
 	rs.rsConnector.Stop()
 	rs.rsConnector.DeleteServer()
 
-	return rs.cleanup()
+	if removePath {
+		if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // Restart restart plugin server
 func (rs *resourceServer) Restart() error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+
 	log.Printf("restarting %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return fmt.Errorf("grpc server instance not found for %s", rs.resourceName)
@@ -278,7 +320,7 @@ func (rs *resourceServer) Restart() error {
 	rs.rsConnector.Stop()
 	rs.rsConnector.DeleteServer()
 
-	return rs.Start()
+	return rs.startLocked()
 }
 
 // Watch for Kubelet socket file; if not present restart server
@@ -443,62 +485,141 @@ func (rs *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStart
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
-// recordSocketID stores the inode and device of the socket at socketPath after
-// a successful Listen so later cleanup can refuse to unlink a superseded path.
-func (rs *resourceServer) recordSocketID() {
-	ino, dev, err := socketFileID(rs.socketPath)
-	if err != nil {
-		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
-		rs.socketIno = 0
-		rs.socketDev = 0
+// recordSocketIDLocked captures the sockfs inode from the open listener returned
+// by Listen (UnixListener.SyscallConn + Fstat), not from Lstat on the shared
+// pathname, so a racing replacement cannot make us record the wrong identity.
+// SyscallConn is used instead of File(): File() can put the listen socket into
+// blocking mode and break grpc Serve/Stop.
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) recordSocketIDLocked(listener net.Listener) {
+	rs.clearSocketOwnershipLocked()
+
+	ul, ok := listener.(*net.UnixListener)
+	if !ok {
+		log.Printf("warning: failed to record socket identity for %s: listener is %T", rs.socketPath, listener)
+		rs.socketOwner = socketOwnerUnknown
 		return
 	}
-	rs.socketIno = ino
-	rs.socketDev = dev
-}
-
-func socketFileID(path string) (ino, dev uint64, err error) {
-	fi, err := os.Lstat(path)
+	sc, err := ul.SyscallConn()
 	if err != nil {
-		return 0, 0, err
+		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
+		rs.socketOwner = socketOwnerUnknown
+		return
 	}
-	st, ok := fi.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, 0, fmt.Errorf("unsupported stat type %T", fi.Sys())
+	var st syscall.Stat_t
+	var ferr error
+	err = sc.Control(func(fd uintptr) {
+		ferr = syscall.Fstat(int(fd), &st)
+	})
+	if err != nil || ferr != nil {
+		if err == nil {
+			err = ferr
+		}
+		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
+		rs.socketOwner = socketOwnerUnknown
+		return
 	}
-	return st.Ino, uint64(st.Dev), nil
+	rs.socketOwner = socketOwnerKnown
+	rs.socketIno = st.Ino
 }
 
-// cleanup removes the registration socket pathname.
-// When socketIno is zero (before first successful Listen, or after identity was
-// cleared), removal is unconditional so Start can reclaim a stale sock.
-// When socketIno is set, the path is removed only if Lstat still names that
-// inode/dev, so a terminating overlapping instance cannot unlink a replacement's
-// active socket (see issue #319).
-func (rs *resourceServer) cleanup() error {
-	if rs.socketIno != 0 {
-		ino, dev, err := socketFileID(rs.socketPath)
-		if err != nil {
-			if os.IsNotExist(err) {
-				rs.socketIno = 0
-				rs.socketDev = 0
-				return nil
-			}
-			return err
-		}
-		if ino != rs.socketIno || dev != rs.socketDev {
-			log.Printf("skipping remove of %s: path no longer refers to this server's socket", rs.socketPath)
-			rs.socketIno = 0
-			rs.socketDev = 0
-			return nil
-		}
-	}
+func (rs *resourceServer) clearSocketOwnershipLocked() {
+	rs.socketOwner = socketOwnerNone
+	rs.socketIno = 0
+}
 
+// shouldRemoveSocketPathLocked reports whether Stop/cleanup should unlink socketPath.
+// Caller must hold lifecycleMu. For Stop, call before the listen socket is closed.
+func (rs *resourceServer) shouldRemoveSocketPathLocked() bool {
+	switch rs.socketOwner {
+	case socketOwnerUnknown:
+		log.Printf("skipping remove of %s: socket ownership unknown after Listen", rs.socketPath)
+		return false
+	case socketOwnerKnown:
+		if _, err := os.Lstat(rs.socketPath); err != nil {
+			if os.IsNotExist(err) {
+				return false
+			}
+			log.Printf("warning: skipping remove of %s: %v", rs.socketPath, err)
+			return false
+		}
+		if !socketPathOwnedSolelyBy(rs.socketPath, rs.socketIno) {
+			log.Printf("skipping remove of %s: path no longer refers to this server's socket", rs.socketPath)
+			return false
+		}
+		return true
+	default: // socketOwnerNone
+		return true
+	}
+}
+
+// unixSocketInodesForPath returns sockfs inodes bound to path in /proc/net/unix.
+// On Linux, Fstat on a Unix listen fd yields a sockfs inode that matches this
+// table, not the filesystem inode from Lstat on the pathname.
+func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
+	f, err := os.Open("/proc/net/unix")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var inos []uint64
+	sc := bufio.NewScanner(f)
+	if !sc.Scan() {
+		return inos, sc.Err()
+	}
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) < 8 {
+			continue
+		}
+		p := fields[7]
+		if len(fields) > 8 {
+			p = strings.Join(fields[7:], " ")
+		}
+		if p != socketPath {
+			continue
+		}
+		ino, err := strconv.ParseUint(fields[6], 10, 64)
+		if err != nil {
+			continue
+		}
+		inos = append(inos, ino)
+	}
+	return inos, sc.Err()
+}
+
+func socketPathOwnedSolelyBy(socketPath string, ino uint64) bool {
+	inos, err := unixSocketInodesForPath(socketPath)
+	if err != nil {
+		log.Printf("warning: cannot verify socket ownership for %s: %v", socketPath, err)
+		return false
+	}
+	return len(inos) == 1 && inos[0] == ino
+}
+
+// cleanup removes the registration socket pathname according to ownership.
+// Tests call cleanup(); Start uses cleanupLocked under lifecycleMu.
+func (rs *resourceServer) cleanup() error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.cleanupLocked()
+}
+
+// cleanupLocked removes the registration socket pathname.
+// socketOwnerNone: unconditional remove so Start can reclaim a stale sock.
+// socketOwnerKnown: remove only if this server is the sole /proc/net/unix binder.
+// socketOwnerUnknown: refuse remove (failed post-Listen capture).
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) cleanupLocked() error {
+	if !rs.shouldRemoveSocketPathLocked() {
+		rs.clearSocketOwnershipLocked()
+		return nil
+	}
 	if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	rs.socketIno = 0
-	rs.socketDev = 0
+	rs.clearSocketOwnershipLocked()
 	return nil
 }
 

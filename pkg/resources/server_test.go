@@ -38,6 +38,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path"
@@ -762,13 +763,15 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			rs := &resourceServer{socketPath: sockPath}
-			rs.recordSocketID()
+			rs.recordSocketIDLocked(ln)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
 			Expect(rs.socketIno).NotTo(BeZero())
 
 			err = rs.cleanup()
 			Expect(err).NotTo(HaveOccurred())
 			_, err = os.Lstat(sockPath)
 			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
 			Expect(rs.socketIno).To(BeZero())
 
 			_ = ln.Close()
@@ -784,29 +787,34 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			oldRS := &resourceServer{socketPath: sockPath}
-			oldRS.recordSocketID()
+			oldRS.recordSocketIDLocked(oldLn)
 			oldIno := oldRS.socketIno
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
 			Expect(oldIno).NotTo(BeZero())
 
-			// Replacement Start: reclaim pathname and bind a new socket (inode B).
+			pathInoBefore, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Replacement Start: reclaim pathname and bind a new socket.
 			Expect(os.Remove(sockPath)).To(Succeed())
 			newLn, err := net.Listen("unix", sockPath)
 			Expect(err).NotTo(HaveOccurred())
 
-			newIno, newDev, err := socketFileID(sockPath)
+			pathInoAfter, err := pathInode(sockPath)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(newIno).NotTo(Equal(oldIno))
+			Expect(pathInoAfter).NotTo(Equal(pathInoBefore))
 
 			// Old Stop must not unlink the replacement's active socket.
 			err = oldRS.cleanup()
 			Expect(err).NotTo(HaveOccurred())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerNone))
 			Expect(oldRS.socketIno).To(BeZero())
 
-			fi, err := os.Lstat(sockPath)
+			_, err = os.Lstat(sockPath)
 			Expect(err).NotTo(HaveOccurred())
-			st := fi.Sys().(*syscall.Stat_t)
-			Expect(st.Ino).To(Equal(newIno))
-			Expect(uint64(st.Dev)).To(Equal(newDev))
+			pathInoFinal, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pathInoFinal).To(Equal(pathInoAfter))
 
 			Expect(newLn.Close()).To(Succeed())
 			_ = oldLn.Close()
@@ -821,7 +829,7 @@ var _ = Describe("resourceServer tests", func() {
 			stale, err := net.Listen("unix", sockPath)
 			Expect(err).NotTo(HaveOccurred())
 
-			// socketIno == 0: unconditional reclaim used by Start before Listen.
+			// socketOwnerNone: unconditional reclaim used by Start before Listen.
 			rs := &resourceServer{socketPath: sockPath}
 			err = rs.cleanup()
 			Expect(err).NotTo(HaveOccurred())
@@ -843,30 +851,86 @@ var _ = Describe("resourceServer tests", func() {
 			ln1, err := net.Listen("unix", sockPath)
 			Expect(err).NotTo(HaveOccurred())
 			rs := &resourceServer{socketPath: sockPath}
-			rs.recordSocketID()
+			rs.recordSocketIDLocked(ln1)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
 			Expect(rs.socketIno).NotTo(BeZero())
 
-			// Same-process Restart path: Start cleanup owns the old inode, then rebinds.
-			err = rs.cleanup()
+			// Same-process Restart path: Start clears ownership then force-reclaims.
+			rs.lifecycleMu.Lock()
+			rs.clearSocketOwnershipLocked()
+			err = rs.cleanupLocked()
+			rs.lifecycleMu.Unlock()
 			Expect(err).NotTo(HaveOccurred())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
 			Expect(rs.socketIno).To(BeZero())
 			_ = ln1.Close()
 
 			ln2, err := net.Listen("unix", sockPath)
 			Expect(err).NotTo(HaveOccurred())
-			rs.recordSocketID()
+			rs.recordSocketIDLocked(ln2)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
 			Expect(rs.socketIno).NotTo(BeZero())
 
 			err = rs.cleanup()
 			Expect(err).NotTo(HaveOccurred())
 			_, err = os.Lstat(sockPath)
 			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
 			Expect(rs.socketIno).To(BeZero())
 			_ = ln2.Close()
 		})
+
+		It("refuses Stop remove when post-Listen ownership capture failed", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-unknown-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer ln.Close()
+
+			rs := &resourceServer{socketPath: sockPath, socketOwner: socketOwnerUnknown}
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
+
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("records identity from the listener fd not a raced pathname", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-listener-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketIDLocked(oldLn)
+			oldIno := rs.socketIno
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
+
+			pathIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			// sockfs ino from the listener differs from the filesystem path ino.
+			Expect(oldIno).NotTo(Equal(pathIno))
+
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer newLn.Close()
+
+			// Ownership still names the original listener inode after path rebind.
+			Expect(rs.socketIno).To(Equal(oldIno))
+
+			_ = oldLn.Close()
+		})
 	})
 
-	DescribeTable("allocating",
+		DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
 			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
 			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
@@ -900,3 +964,15 @@ var _ = Describe("resourceServer tests", func() {
 		Entry("empty AllocateRequest", &pluginapi.AllocateRequest{}, 0, false),
 	)
 })
+
+func pathInode(path string) (uint64, error) {
+	fi, err := os.Lstat(path)
+	if err != nil {
+		return 0, err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("unsupported stat type %T", fi.Sys())
+	}
+	return st.Ino, nil
+}
