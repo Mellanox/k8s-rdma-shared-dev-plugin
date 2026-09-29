@@ -1,51 +1,13 @@
 name: "Build"
 on: [push, pull_request]
 
+
+permissions:
+  contents: read
+
 jobs:
-  lint:
-    name: golangci-lint
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Set up Go 1.x
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25.x'
-          check-latest: true
-      - name: checkout
-        uses: actions/checkout@v7
-      - name: lint
-        run: make lint
-  test:
-    name: test
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Set up Go 1.x
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25.x'
-          check-latest: true
-      - name: checkout
-        uses: actions/checkout@v7
-      - name: install hwdata -yq
-        run: sudo apt-get install hwdata -yq
-      - name: test
-        run: make test-coverage
-  build:
-    name: build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Set up Go 1.x
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25.x'
-          check-latest: true
-      - name: checkout
-        uses: actions/checkout@v7
-      - name: build
-        run: make build
+  ci:
+    uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/go-ci-reusable.yml@main
+    with:
+      test-command: make test-coverage
+      apt-packages: hwdata

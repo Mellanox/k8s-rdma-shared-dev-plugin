@@ -1,28 +1,11 @@
 name: go-static-analysis
 on: [push, pull_request]
+
+permissions:
+  contents: read
+
 jobs:
-  golangci:
-    name: Lint
-    runs-on: ubuntu-24.04
-    steps:
-      - name: set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: 1.25.x
-          check-latest: true
-      - name: checkout PR
-        uses: actions/checkout@v7
-      - name: run make lint
-        run: make lint
   hadolint:
-    runs-on: ubuntu-24.04
-    steps:
-      - name: set up Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: 1.25.x
-          check-latest: true
-      - name: checkout PR
-        uses: actions/checkout@v7
-      - name: run make hadolint
-        run: make hadolint
+    uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/go-check-reusable.yml@main
+    with:
+      command: make hadolint
