@@ -16,7 +16,8 @@
 
 ARG BASE_IMAGE_GO_DISTROLESS
 
-FROM golang:alpine as builder
+ARG BASE_IMAGE_GO_BUILDER_ALPINE=golang:alpine
+FROM ${BASE_IMAGE_GO_BUILDER_ALPINE} as builder
 
 COPY . /usr/src/k8s-rdma-shared-dp
 

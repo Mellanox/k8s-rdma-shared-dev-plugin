@@ -11,7 +11,10 @@ on:
       - v*
 
 jobs:
+  go-builder-images:
+    uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/go-builder-images-reusable.yml@main
   build-and-push-amd64:
+    needs: [go-builder-images]
     name: Push amd64 image to ghcr.io
     runs-on: ubuntu-24.04
     steps:
@@ -44,6 +47,9 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
+          build-args: |
+            BASE_IMAGE_GO_BUILDER=${{ needs.go-builder-images.outputs.standard }}
+            BASE_IMAGE_GO_BUILDER_ALPINE=${{ needs.go-builder-images.outputs.alpine }}
           context: .
           push: true
           platforms: linux/amd64
@@ -52,6 +58,7 @@ jobs:
           file: ./Dockerfile
 
   build-and-push-arm64:
+    needs: [go-builder-images]
     name: Push arm64 image to ghcr.io
     runs-on: ubuntu-24.04
     steps:
@@ -85,6 +92,9 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
         with:
+          build-args: |
+            BASE_IMAGE_GO_BUILDER=${{ needs.go-builder-images.outputs.standard }}
+            BASE_IMAGE_GO_BUILDER_ALPINE=${{ needs.go-builder-images.outputs.alpine }}
           context: .
           push: true
           platforms: linux/arm64
