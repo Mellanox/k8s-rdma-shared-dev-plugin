@@ -10,10 +10,7 @@ on:
     types: [published]
 
 jobs:
-  go-builder-images:
-    uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/go-builder-images-reusable.yml@main
   push_to_registry:
-    needs: [go-builder-images]
     name: Push Docker image to Docker Hub
     runs-on: ubuntu-24.04
     steps:
@@ -35,9 +32,6 @@ jobs:
       - name: Build and push UBI Docker image
         uses: docker/build-push-action@v7
         with:
-          build-args: |
-            BASE_IMAGE_GO_BUILDER=${{ needs.go-builder-images.outputs.standard }}
-            BASE_IMAGE_GO_BUILDER_ALPINE=${{ needs.go-builder-images.outputs.alpine }}
           context: .
           push: true
           file: Dockerfile.ubi

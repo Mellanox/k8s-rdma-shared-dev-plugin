@@ -1,5 +1,4 @@
-ARG BASE_IMAGE_GO_BUILDER_ALPINE=golang:alpine
-FROM ${BASE_IMAGE_GO_BUILDER_ALPINE} as builder
+FROM golang:alpine as builder
 
 COPY . /usr/src/k8s-rdma-shared-dp
 
