@@ -8,6 +8,8 @@ spec:
     spec:
       containers:
         - name: k8s-rdma-shared-dp-ds
+          args:
+            - --use-cdi
           volumeMounts:
             - name: dynamic-cdi
               mountPath: /var/run/cdi
