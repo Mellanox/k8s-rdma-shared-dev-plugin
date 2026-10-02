@@ -79,7 +79,7 @@ type resourceServer struct {
 	health            chan *pluginapi.Device
 	rsConnector       types.ResourceServerPort
 	rdmaHcaMax        int
-	// Mutex protects devs and deviceSpec
+	// Mutex protects devs, deviceSpec and pciDevices
 	mutex           sync.RWMutex
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
@@ -329,9 +329,7 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 		return err
 	}
 
-	rs.mutex.RLock()
 	err := rs.updateCDISpec()
-	rs.mutex.RUnlock()
 	if err != nil {
 		log.Printf("cannot update CDI specs: %v", err)
 		return err
@@ -363,6 +361,9 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 }
 
 func (rs *resourceServer) updateCDISpec() error {
+	rs.mutex.RLock()
+	defer rs.mutex.RUnlock()
+
 	// check if CDI mode is enabled
 	if !rs.useCdi {
 		return nil
@@ -484,13 +485,14 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	deviceSpec := getDevicesSpec(devices)
 
 	// If not devices not changed skip
-	if !devicesChanged(rs.deviceSpec, deviceSpec) {
+	if !devicesChanged(rs.deviceSpec, deviceSpec) && (!rs.useCdi || !pciDevicesChanged(rs.pciDevices, devices)) {
 		log.Printf("no changes to devices for \"%s\"", rs.resourceName)
 		log.Printf("exposing \"%d\" devices", len(rs.devs))
 		return
 	}
 
 	rs.deviceSpec = deviceSpec
+	rs.pciDevices = devices
 	needUpdate = true
 
 	// In case no RDMA resource report 0 resources
@@ -536,6 +538,23 @@ func devicesChanged(deviceList, newDeviceList []*pluginapi.DeviceSpec) bool {
 		}
 	}
 
+	return false
+}
+
+// pciDevicesChanged compares the PCI addresses used in CDI device names.
+func pciDevicesChanged(devices, newDevices []types.PciNetDevice) bool {
+	if len(devices) != len(newDevices) {
+		return true
+	}
+	addresses := make(map[string]struct{}, len(devices))
+	for _, device := range devices {
+		addresses[device.GetPciAddr()] = struct{}{}
+	}
+	for _, device := range newDevices {
+		if _, exists := addresses[device.GetPciAddr()]; !exists {
+			return true
+		}
+	}
 	return false
 }
 
