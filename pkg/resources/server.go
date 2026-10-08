@@ -350,7 +350,7 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 			if err := rs.sendDevices(resp, s); err != nil {
 				// The old stream may not be closed properly, return to close it
 				// and pass the update event to the new stream for processing
-				rs.updateResource <- true
+				rs.notifyUpdate()
 				return err
 			}
 			err := rs.updateCDISpec()
@@ -474,9 +474,9 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 	rs.mutex.Lock()
 	defer func() {
 		rs.mutex.Unlock()
-		// Update event may block, so it must be sent after mutex.Unlock() to avoid deadlock caused by nesting
+		// Notify after unlocking so ListAndWatch can read the updated inventory.
 		if needUpdate {
-			rs.updateResource <- true
+			rs.notifyUpdate()
 		}
 	}()
 
@@ -511,6 +511,15 @@ func (rs *resourceServer) UpdateDevices(devices []types.PciNetDevice) {
 			devs = append(devs, dpDevice)
 		}
 		rs.devs = devs
+	}
+}
+
+func (rs *resourceServer) notifyUpdate() {
+	// ListAndWatch sends the current inventory, so one pending notification is
+	// sufficient. Do not block discovery while the stream is disconnected.
+	select {
+	case rs.updateResource <- true:
+	default:
 	}
 }
 
