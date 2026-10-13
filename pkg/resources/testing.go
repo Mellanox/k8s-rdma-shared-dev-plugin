@@ -32,6 +32,7 @@ import (
 
 // Implementation of pluginapi.RegistrationServer for use in tests.
 type fakeRegistrationServer struct {
+	pluginapi.UnimplementedRegistrationServer
 	grpcServer      *grpc.Server
 	sockDir         string
 	pluginEndpoint  string
