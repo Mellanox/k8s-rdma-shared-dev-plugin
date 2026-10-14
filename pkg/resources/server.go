@@ -68,6 +68,8 @@ type resourcesServerPort struct {
 }
 
 type resourceServer struct {
+	pluginapi.UnimplementedDevicePluginServer
+	registerapi.UnimplementedRegistrationServer
 	activeSockDir     string
 	deprecatedSockDir string
 	resourceName      string
@@ -418,7 +420,7 @@ func (rs *resourceServer) Allocate(_ context.Context, r *pluginapi.AllocateReque
 		ContainerResponses: ress,
 	}
 
-	log.Println("allocate response: ", response)
+	log.Println("allocate response: ", &response)
 	return &response, nil
 }
 

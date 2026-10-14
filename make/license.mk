@@ -24,7 +24,7 @@ $(BIN_DIR):
 addlicense: $(BIN_DIR)
 	@if [ ! -f "$(ADDLICENSE)" ]; then \
 		echo "Installing addlicense to $(ADDLICENSE)..."; \
-		GOBIN=$(abspath $(BIN_DIR)) go install github.com/google/addlicense@$(ADDLICENSE_VERSION); \
+		GOBIN=$(abspath $(BIN_DIR)) GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/google/addlicense@$(ADDLICENSE_VERSION); \
 	else \
 		echo "addlicense already installed at $(ADDLICENSE)"; \
 	fi
@@ -46,7 +46,7 @@ copyright: addlicense
 go-licenses: $(BIN_DIR)
 	@if [ ! -f "$(GO_LICENSES)" ]; then \
 		echo "Installing go-licenses to $(GO_LICENSES)..."; \
-		GOBIN=$(abspath $(BIN_DIR)) go install github.com/google/go-licenses@$(GO_LICENSES_VERSION); \
+		GOBIN=$(abspath $(BIN_DIR)) GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/google/go-licenses@$(GO_LICENSES_VERSION); \
 	else \
 		echo "go-licenses already installed at $(GO_LICENSES)"; \
 	fi

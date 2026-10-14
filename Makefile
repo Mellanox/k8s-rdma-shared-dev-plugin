@@ -1,3 +1,11 @@
+# Version information
+GO_MOD_VERSION := $(shell awk '/^go / { print $$2 }' go.mod)
+GO_LOCAL_VERSION := $(patsubst go%,%,$(shell go env GOVERSION))
+# Build tools with the newer of go.mod and the local toolchain. A linter built
+# with an older Go cannot typecheck a newer standard library.
+GO_TOOLCHAIN_VERSION := $(shell printf '%s\n%s\n' "$(GO_MOD_VERSION)" "$(GO_LOCAL_VERSION)" | sort -V | tail -n 1)
+GO_TOOLCHAIN := go$(GO_TOOLCHAIN_VERSION)
+
 include make/license.mk
 # Package related
 BINARY_NAME=k8s-rdma-shared-dp
@@ -39,7 +47,7 @@ GOLANGCI_LINT = $(BINDIR)/golangci-lint-$(GOLANGCILINT_VERSION)
 # golangci-lint version should be updated periodically
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
-GOLANGCILINT_VERSION ?= v2.11.4
+GOLANGCILINT_VERSION ?= v2.12.2
 GOPROXY ?= $(shell go env GOPROXY)
 TIMEOUT = 20
 Q = $(if $(filter 1,$V),,@)
@@ -61,12 +69,12 @@ $(BUILDDIR)/$(BINARY_NAME): $(GOFILES) | $(BUILDDIR)
 
 # Tools
 $(GOLANGCI_LINT): | $(BINDIR) ; $(info  installing golangci-lint...)
-	$Q GOBIN=$(BINDIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCILINT_VERSION)
+	$Q GOBIN=$(BINDIR) GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCILINT_VERSION)
 	mv $(BINDIR)/golangci-lint $(GOLANGCI_LINT)
 
 GOVERALLS = $(BINDIR)/goveralls
 $(GOVERALLS): | $(BINDIR) ; $(info  installing goveralls...)
-	$Q GOBIN=$(BINDIR) go install github.com/mattn/goveralls@v0.0.12
+	$Q GOBIN=$(BINDIR) GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/mattn/goveralls@v0.0.12
 
 HADOLINT_TOOL = $(BINDIR)/hadolint
 $(HADOLINT_TOOL): | $(BINDIR) ; $(info  installing hadolint...)
@@ -75,7 +83,7 @@ $(HADOLINT_TOOL): | $(BINDIR) ; $(info  installing hadolint...)
 MOCKERY = $(BINDIR)/mockery
 MOCKERY_VER = v3.2.5
 $(MOCKERY): | $(BINDIR) ; $(info  installing mockery...)
-	$Q GOBIN=$(BINDIR) go install github.com/vektra/mockery/v3@$(MOCKERY_VER)
+	$Q GOBIN=$(BINDIR) GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/vektra/mockery/v3@$(MOCKERY_VER)
 
 # Tests
 .PHONY: lint
