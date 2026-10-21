@@ -265,7 +265,12 @@ func (rs *resourceServer) startLocked() error {
 
 	if !rs.watchMode {
 		if err = rs.register(); err != nil {
+			removePath := rs.shouldRemoveSocketPathLocked()
+			rs.clearSocketOwnershipLocked()
 			rs.rsConnector.Stop()
+			if removePath {
+				_ = os.Remove(rs.socketPath)
+			}
 			return err
 		}
 	}
@@ -274,7 +279,23 @@ func (rs *resourceServer) startLocked() error {
 }
 
 // Stop stops the gRPC server
+//
+// In non-watch mode the watcher is signaled before lifecycleMu is taken:
+// Watch calls Restart, which takes lifecycleMu, so sending on the unbuffered
+// stopWatcher while holding the lock could deadlock against a Watch that has
+// just decided to restart.
 func (rs *resourceServer) Stop() error {
+	rs.lifecycleMu.Lock()
+	running := rs.rsConnector != nil && rs.rsConnector.GetServer() != nil
+	rs.lifecycleMu.Unlock()
+	if !running {
+		return nil
+	}
+
+	if !rs.watchMode {
+		rs.stopWatcher <- true
+	}
+
 	rs.lifecycleMu.Lock()
 	defer rs.lifecycleMu.Unlock()
 	return rs.stopLocked()
@@ -284,10 +305,6 @@ func (rs *resourceServer) stopLocked() error {
 	log.Printf("stopping %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return nil
-	}
-
-	if !rs.watchMode {
-		rs.stopWatcher <- true
 	}
 
 	// Decide path removal while the listen socket is still alive so sockfs
@@ -500,6 +517,11 @@ func (rs *resourceServer) recordSocketIDLocked(listener net.Listener) {
 		rs.socketOwner = socketOwnerUnknown
 		return
 	}
+	// net.Listen("unix", ...) listeners unlink their path on Close by
+	// default, and grpc Stop closes the listener. Path removal is owned by
+	// shouldRemoveSocketPathLocked, so the close must not unlink the path a
+	// replacement instance may have bound in the meantime.
+	ul.SetUnlinkOnClose(false)
 	sc, err := ul.SyscallConn()
 	if err != nil {
 		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
@@ -561,6 +583,13 @@ const (
 )
 
 // unixSocketInodesForPath returns sockfs inodes bound to path in /proc/net/unix.
+//
+// /proc/net/unix only lists sockets of the reader's network namespace. The
+// ownership check is sound because the plugin DaemonSet runs with
+// hostNetwork: true, so the outgoing and the replacement pod share the host
+// namespace and each sees the other's binding. Without hostNetwork the old pod
+// would only see its own entry, treat itself as the sole owner and remove the
+// replacement's socket.
 // On Linux, Fstat on a Unix listen fd yields a sockfs inode that matches this
 // table, not the filesystem inode from Lstat on the pathname.
 func unixSocketInodesForPath(socketPath string) ([]uint64, error) {

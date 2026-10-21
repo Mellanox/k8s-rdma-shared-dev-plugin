@@ -804,6 +804,12 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pathInoAfter).NotTo(Equal(pathInoBefore))
 
+			// Closing the old listener must not unlink the path either:
+			// recordSocketIDLocked turns off unlink on close.
+			Expect(oldLn.Close()).To(Succeed())
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
 			// Old Stop must not unlink the replacement's active socket.
 			err = oldRS.cleanup()
 			Expect(err).NotTo(HaveOccurred())
@@ -817,8 +823,110 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(pathInoFinal).To(Equal(pathInoAfter))
 
 			Expect(newLn.Close()).To(Succeed())
-			_ = oldLn.Close()
 		})
+
+		It("real Stop keeps the socket a replacement instance has bound", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stop-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldRS := &resourceServer{
+				resourceName: "rdma/test",
+				socketName:   "test.sock",
+				socketPath:   sockPath,
+				watchMode:    true,
+				stopWatcher:  make(chan bool),
+				health:       make(chan *pluginapi.Device),
+				rsConnector:  &resourcesServerPort{},
+			}
+			Expect(oldRS.Start()).To(Succeed())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
+
+			// Replacement instance reclaims the path and binds its own socket.
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer newLn.Close()
+			newIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// The outgoing instance stops through the real grpc server and
+			// listener, which closes the old listener.
+			Expect(oldRS.Stop()).To(Succeed())
+
+			finalIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(finalIno).To(Equal(newIno))
+			conn, err := net.Dial("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			_ = conn.Close()
+		})
+
+		It("real Stop removes its own socket when no replacement holds the path", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stop-own-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			rs := &resourceServer{
+				resourceName: "rdma/test",
+				socketName:   "test.sock",
+				socketPath:   sockPath,
+				watchMode:    true,
+				stopWatcher:  make(chan bool),
+				health:       make(chan *pluginapi.Device),
+				rsConnector:  &resourcesServerPort{},
+			}
+			Expect(rs.Start()).To(Succeed())
+			Expect(rs.Stop()).To(Succeed())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+		})
+	})
+
+	Context("Stop and the socket watcher", func() {
+		It("does not hold lifecycleMu while signaling the watcher", func() {
+			grpcServer := grpc.NewServer()
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
+			inStop := make(chan struct{})
+			var once sync.Once
+			rsc.On("GetServer").Return(grpcServer).Run(func(mock.Arguments) {
+				once.Do(func() { close(inStop) })
+			})
+			rsc.On("Stop").Return()
+			rsc.On("DeleteServer").Return()
+
+			rs := &resourceServer{
+				rsConnector: rsc,
+				watchMode:   false,
+				stopWatcher: make(chan bool),
+			}
+
+			// Mimic Watch: it has just found the socket path missing and
+			// runs Restart, which takes lifecycleMu, before it gets back to
+			// reading stopWatcher.
+			watcherDone := make(chan struct{})
+			go func() {
+				defer close(watcherDone)
+				<-inStop
+				time.Sleep(100 * time.Millisecond)
+				func() {
+					rs.lifecycleMu.Lock()
+					defer rs.lifecycleMu.Unlock()
+				}()
+				<-rs.stopWatcher
+			}()
+
+			stopDone := make(chan error, 1)
+			go func() { stopDone <- rs.Stop() }()
+
+			Eventually(stopDone, 5*time.Second).Should(Receive(BeNil()))
+			Eventually(watcherDone, 5*time.Second).Should(BeClosed())
+		})
+	})
+
+	Context("socket cleanup ownership on start and rebind", func() {
 
 		It("Start cleanup still reclaims a stale socket before Listen", func() {
 			dir, err := os.MkdirTemp("", "rdma-sock-stale-*")
