@@ -885,6 +885,59 @@ var _ = Describe("resourceServer tests", func() {
 		})
 	})
 
+	Context("replacement binding after the outgoing ownership check", func() {
+		It("Stop does not unlink a socket a replacement binds at the Stop boundary", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-race-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			newRS := func(port types.ResourceServerPort) *resourceServer {
+				return &resourceServer{
+					resourceName: "rdma/test",
+					socketName:   "test.sock",
+					socketPath:   sockPath,
+					watchMode:    true,
+					stopWatcher:  make(chan bool),
+					health:       make(chan *pluginapi.Device),
+					rsConnector:  port,
+				}
+			}
+
+			replacement := newRS(&resourcesServerPort{})
+			replacementStarted := make(chan error, 1)
+			oldPort := &stopHookServerPort{resourcesServerPort: &resourcesServerPort{}}
+			oldRS := newRS(oldPort)
+			Expect(oldRS.Start()).To(Succeed())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
+
+			// The outgoing instance has already passed its ownership check
+			// when its connector Stop runs. Start the replacement there, the
+			// window the old instance's os.Remove used to race with, and
+			// give it time to reclaim and bind before Stop returns.
+			oldPort.onStop = func() {
+				go func() { replacementStarted <- replacement.Start() }()
+				select {
+				case err := <-replacementStarted:
+					replacementStarted <- err
+				case <-time.After(300 * time.Millisecond):
+				}
+			}
+
+			Expect(oldRS.Stop()).To(Succeed())
+			Eventually(replacementStarted, 5*time.Second).Should(Receive(BeNil()))
+			defer func() { _ = replacement.Stop() }()
+
+			Expect(replacement.socketOwner).To(Equal(socketOwnerKnown))
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(socketPathOwnedSolelyBy(sockPath, replacement.socketIno)).To(BeTrue())
+			conn, err := net.Dial("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			_ = conn.Close()
+		})
+	})
+
 	Context("Stop and the socket watcher", func() {
 		It("does not hold lifecycleMu while signaling the watcher", func() {
 			grpcServer := grpc.NewServer()
@@ -1083,4 +1136,19 @@ func pathInode(p string) (uint64, error) {
 		return 0, fmt.Errorf("unsupported stat type %T", fi.Sys())
 	}
 	return st.Ino, nil
+}
+
+// stopHookServerPort is a real resourcesServerPort whose Stop first runs
+// onStop, so a test can act at the boundary between the outgoing instance's
+// ownership check and its pathname unlink.
+type stopHookServerPort struct {
+	*resourcesServerPort
+	onStop func()
+}
+
+func (p *stopHookServerPort) Stop() {
+	if p.onStop != nil {
+		p.onStop()
+	}
+	p.resourcesServerPort.Stop()
 }

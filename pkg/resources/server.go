@@ -236,6 +236,10 @@ func (rs *resourceServer) Start() error {
 }
 
 func (rs *resourceServer) startLocked() error {
+	// Reclaim, bind and identity capture run under the cross-process path
+	// lock so an outgoing instance cannot pass its ownership check and then
+	// unlink the socket bound here (see lockSocketPath).
+	unlock := lockSocketPath(rs.socketPath)
 	// Pre-listen reclaim: clear ownership so cleanup force-removes any stale sock.
 	rs.clearSocketOwnershipLocked()
 	_ = rs.cleanupLocked()
@@ -243,9 +247,11 @@ func (rs *resourceServer) startLocked() error {
 	rs.rsConnector.CreateServer()
 	sock, err := rs.rsConnector.Listen("unix", rs.socketPath)
 	if err != nil {
+		unlock()
 		return err
 	}
 	rs.recordSocketIDLocked(sock)
+	unlock()
 
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
@@ -265,12 +271,7 @@ func (rs *resourceServer) startLocked() error {
 
 	if !rs.watchMode {
 		if err = rs.register(); err != nil {
-			removePath := rs.shouldRemoveSocketPathLocked()
-			rs.clearSocketOwnershipLocked()
-			rs.rsConnector.Stop()
-			if removePath {
-				_ = os.Remove(rs.socketPath)
-			}
+			_ = rs.stopAndRemoveOwnedSocketLocked()
 			return err
 		}
 	}
@@ -307,6 +308,23 @@ func (rs *resourceServer) stopLocked() error {
 		return nil
 	}
 
+	err := rs.stopAndRemoveOwnedSocketLocked()
+	rs.rsConnector.DeleteServer()
+	return err
+}
+
+// stopAndRemoveOwnedSocketLocked stops the grpc server and unlinks socketPath
+// only if it still refers to this server's socket.
+//
+// The ownership check, the listener close and the unlink all run under the
+// cross-process path lock. A replacement instance takes the same lock around
+// its reclaim and bind in startLocked, so it cannot bind the path between our
+// check and our os.Remove; lifecycleMu alone only serializes this instance.
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) stopAndRemoveOwnedSocketLocked() error {
+	unlock := lockSocketPath(rs.socketPath)
+	defer unlock()
+
 	// Decide path removal while the listen socket is still alive so sockfs
 	// ownership can be checked via /proc/net/unix. grpc Stop closes the listener.
 	removePath := rs.shouldRemoveSocketPathLocked()
@@ -314,7 +332,6 @@ func (rs *resourceServer) stopLocked() error {
 
 	// Note: stopping RPC server will cancel any outstanding ListAndWatch() calls
 	rs.rsConnector.Stop()
-	rs.rsConnector.DeleteServer()
 
 	if removePath {
 		if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
@@ -322,6 +339,42 @@ func (rs *resourceServer) stopLocked() error {
 		}
 	}
 	return nil
+}
+
+// lockSocketPath takes an exclusive flock(2) on the directory holding
+// socketPath and returns the matching unlock func.
+//
+// Ownership checks on the pathname are check-then-act: another plugin process
+// (for example the replacement pod during a DaemonSet rolling update) can bind
+// the path after our check and before our unlink. Every instance takes this
+// lock around "check + unlink" and around "reclaim + bind", which makes the two
+// sequences mutually exclusive across processes. The directory itself is
+// locked instead of a sidecar lock file because kubelet clears the
+// device-plugins directory on restart, which would silently swap a lock
+// file's inode under a holder. flock is per open file description, so
+// separate resource servers in one process also exclude each other; the
+// critical sections are short and never nest.
+//
+// If the lock cannot be taken the caller proceeds unlocked (the previous
+// behavior) after logging a warning.
+func lockSocketPath(socketPath string) func() {
+	dir := filepath.Dir(socketPath)
+	f, err := os.Open(dir)
+	if err != nil {
+		log.Printf("warning: cannot open %s to lock socket path %s: %v", dir, socketPath, err)
+		return func() {}
+	}
+	//nolint:gosec // fd comes from the runtime and always fits in int
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		log.Printf("warning: cannot lock %s for socket path %s: %v", dir, socketPath, err)
+		_ = f.Close()
+		return func() {}
+	}
+	return func() {
+		//nolint:gosec // fd comes from the runtime and always fits in int
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}
 }
 
 // Restart restart plugin server
