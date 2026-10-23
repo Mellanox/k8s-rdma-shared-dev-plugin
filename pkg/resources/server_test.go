@@ -918,8 +918,8 @@ var _ = Describe("resourceServer tests", func() {
 			oldPort.onStop = func() {
 				go func() { replacementStarted <- replacement.Start() }()
 				select {
-				case err := <-replacementStarted:
-					replacementStarted <- err
+				case startErr := <-replacementStarted:
+					replacementStarted <- startErr
 				case <-time.After(300 * time.Millisecond):
 				}
 			}
