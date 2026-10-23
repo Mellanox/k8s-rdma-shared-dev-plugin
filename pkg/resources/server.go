@@ -35,13 +35,16 @@
 package resources
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
+	"syscall"
 
 	"time"
 
@@ -63,6 +66,16 @@ const (
 	cdiResourceKind   = "net-rdma"
 )
 
+// Socket ownership for registration path cleanup (issue #319).
+const (
+	// socketOwnerNone: no post-Listen ownership; Start reclaim force-removes.
+	socketOwnerNone uint8 = iota
+	// socketOwnerKnown: sockfs ino captured from the open listener.
+	socketOwnerKnown
+	// socketOwnerUnknown: Listen succeeded but capture failed; Stop must not remove.
+	socketOwnerUnknown
+)
+
 type resourcesServerPort struct {
 	server *grpc.Server
 }
@@ -76,13 +89,21 @@ type resourceServer struct {
 	watchMode         bool
 	socketName        string
 	socketPath        string
-	stopWatcher       chan bool
-	updateResource    chan bool
-	health            chan *pluginapi.Device
-	rsConnector       types.ResourceServerPort
-	rdmaHcaMax        int
-	// Mutex protects devs and deviceSpec
-	mutex           sync.RWMutex
+	// socketOwner/socketIno identify the Listen-created socket so Stop only
+	// unlinks the pathname when it still refers to this process's socket.
+	// socketIno is the sockfs inode from the open listener (SyscallConn+Fstat),
+	// not Lstat on the shared path. See socketOwner* constants.
+	socketOwner    uint8
+	socketIno      uint64
+	stopWatcher    chan bool
+	updateResource chan bool
+	health         chan *pluginapi.Device
+	rsConnector    types.ResourceServerPort
+	rdmaHcaMax     int
+	// mutex protects devs and deviceSpec
+	mutex sync.RWMutex
+	// lifecycleMu serializes Start/Stop/Restart and socket ownership cleanup
+	lifecycleMu     sync.Mutex
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
 	pciDevices      []types.PciNetDevice
@@ -211,13 +232,28 @@ func detectPluginWatchMode(sockDir string) bool {
 
 // Start starts the gRPC server of the device plugin
 func (rs *resourceServer) Start() error {
-	_ = rs.cleanup()
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.startLocked()
+}
+
+func (rs *resourceServer) startLocked() error {
+	// Reclaim, bind and identity capture run under the cross-process path
+	// lock so an outgoing instance cannot pass its ownership check and then
+	// unlink the socket bound here (see lockSocketPath).
+	unlock := lockSocketPath(rs.socketPath)
+	// Pre-listen reclaim: clear ownership so cleanup force-removes any stale sock.
+	rs.clearSocketOwnershipLocked()
+	_ = rs.cleanupLocked()
 	log.Printf("starting %s device plugin endpoint at: %s\n", rs.resourceName, rs.socketName)
 	rs.rsConnector.CreateServer()
 	sock, err := rs.rsConnector.Listen("unix", rs.socketPath)
 	if err != nil {
+		unlock()
 		return err
 	}
+	rs.recordSocketIDLocked(sock)
+	unlock()
 
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
@@ -237,7 +273,7 @@ func (rs *resourceServer) Start() error {
 
 	if !rs.watchMode {
 		if err = rs.register(); err != nil {
-			rs.rsConnector.Stop()
+			_ = rs.stopAndRemoveOwnedSocketLocked()
 			return err
 		}
 	}
@@ -246,9 +282,16 @@ func (rs *resourceServer) Start() error {
 }
 
 // Stop stops the gRPC server
+//
+// In non-watch mode the watcher is signaled before lifecycleMu is taken:
+// Watch calls Restart, which takes lifecycleMu, so sending on the unbuffered
+// stopWatcher while holding the lock could deadlock against a Watch that has
+// just decided to restart.
 func (rs *resourceServer) Stop() error {
-	log.Printf("stopping %s device plugin server...", rs.resourceName)
-	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
+	rs.lifecycleMu.Lock()
+	running := rs.rsConnector != nil && rs.rsConnector.GetServer() != nil
+	rs.lifecycleMu.Unlock()
+	if !running {
 		return nil
 	}
 
@@ -256,15 +299,91 @@ func (rs *resourceServer) Stop() error {
 		rs.stopWatcher <- true
 	}
 
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.stopLocked()
+}
+
+func (rs *resourceServer) stopLocked() error {
+	log.Printf("stopping %s device plugin server...", rs.resourceName)
+	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
+		return nil
+	}
+
+	err := rs.stopAndRemoveOwnedSocketLocked()
+	rs.rsConnector.DeleteServer()
+	return err
+}
+
+// stopAndRemoveOwnedSocketLocked stops the grpc server and unlinks socketPath
+// only if it still refers to this server's socket.
+//
+// The ownership check, the listener close and the unlink all run under the
+// cross-process path lock. A replacement instance takes the same lock around
+// its reclaim and bind in startLocked, so it cannot bind the path between our
+// check and our os.Remove; lifecycleMu alone only serializes this instance.
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) stopAndRemoveOwnedSocketLocked() error {
+	unlock := lockSocketPath(rs.socketPath)
+	defer unlock()
+
+	// Decide path removal while the listen socket is still alive so sockfs
+	// ownership can be checked via /proc/net/unix. grpc Stop closes the listener.
+	removePath := rs.shouldRemoveSocketPathLocked()
+	rs.clearSocketOwnershipLocked()
+
 	// Note: stopping RPC server will cancel any outstanding ListAndWatch() calls
 	rs.rsConnector.Stop()
-	rs.rsConnector.DeleteServer()
 
-	return rs.cleanup()
+	if removePath {
+		if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// lockSocketPath takes an exclusive flock(2) on the directory holding
+// socketPath and returns the matching unlock func.
+//
+// Ownership checks on the pathname are check-then-act: another plugin process
+// (for example the replacement pod during a DaemonSet rolling update) can bind
+// the path after our check and before our unlink. Every instance takes this
+// lock around "check + unlink" and around "reclaim + bind", which makes the two
+// sequences mutually exclusive across processes. The directory itself is
+// locked instead of a sidecar lock file because kubelet clears the
+// device-plugins directory on restart, which would silently swap a lock
+// file's inode under a holder. flock is per open file description, so
+// separate resource servers in one process also exclude each other; the
+// critical sections are short and never nest.
+//
+// If the lock cannot be taken the caller proceeds unlocked (the previous
+// behavior) after logging a warning.
+func lockSocketPath(socketPath string) func() {
+	dir := filepath.Dir(socketPath)
+	f, err := os.Open(dir)
+	if err != nil {
+		log.Printf("warning: cannot open %s to lock socket path %s: %v", dir, socketPath, err)
+		return func() {}
+	}
+	//nolint:gosec // fd comes from the runtime and always fits in int
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		log.Printf("warning: cannot lock %s for socket path %s: %v", dir, socketPath, err)
+		_ = f.Close()
+		return func() {}
+	}
+	return func() {
+		//nolint:gosec // fd comes from the runtime and always fits in int
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	}
 }
 
 // Restart restart plugin server
 func (rs *resourceServer) Restart() error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+
 	log.Printf("restarting %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
 		return fmt.Errorf("grpc server instance not found for %s", rs.resourceName)
@@ -273,7 +392,7 @@ func (rs *resourceServer) Restart() error {
 	rs.rsConnector.Stop()
 	rs.rsConnector.DeleteServer()
 
-	return rs.Start()
+	return rs.startLocked()
 }
 
 // Watch for Kubelet socket file; if not present restart server
@@ -438,11 +557,160 @@ func (rs *resourceServer) PreStartContainer(context.Context, *pluginapi.PreStart
 	return &pluginapi.PreStartContainerResponse{}, nil
 }
 
+// recordSocketIDLocked captures the sockfs inode from the open listener returned
+// by Listen (UnixListener.SyscallConn + Fstat), not from Lstat on the shared
+// pathname, so a racing replacement cannot make us record the wrong identity.
+// SyscallConn is used instead of File(): File() can put the listen socket into
+// blocking mode and break grpc Serve/Stop.
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) recordSocketIDLocked(listener net.Listener) {
+	rs.clearSocketOwnershipLocked()
+
+	ul, ok := listener.(*net.UnixListener)
+	if !ok {
+		log.Printf("warning: failed to record socket identity for %s: listener is %T", rs.socketPath, listener)
+		rs.socketOwner = socketOwnerUnknown
+		return
+	}
+	// net.Listen("unix", ...) listeners unlink their path on Close by
+	// default, and grpc Stop closes the listener. Path removal is owned by
+	// shouldRemoveSocketPathLocked, so the close must not unlink the path a
+	// replacement instance may have bound in the meantime.
+	ul.SetUnlinkOnClose(false)
+	sc, err := ul.SyscallConn()
+	if err != nil {
+		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
+		rs.socketOwner = socketOwnerUnknown
+		return
+	}
+	var st syscall.Stat_t
+	var ferr error
+	err = sc.Control(func(fd uintptr) {
+		ferr = syscall.Fstat(int(fd), &st) //nolint:gosec // fd comes from the runtime and always fits in int
+	})
+	if err != nil || ferr != nil {
+		if err == nil {
+			err = ferr
+		}
+		log.Printf("warning: failed to record socket identity for %s: %v", rs.socketPath, err)
+		rs.socketOwner = socketOwnerUnknown
+		return
+	}
+	rs.socketOwner = socketOwnerKnown
+	rs.socketIno = st.Ino
+}
+
+func (rs *resourceServer) clearSocketOwnershipLocked() {
+	rs.socketOwner = socketOwnerNone
+	rs.socketIno = 0
+}
+
+// shouldRemoveSocketPathLocked reports whether Stop/cleanup should unlink socketPath.
+// Caller must hold lifecycleMu. For Stop, call before the listen socket is closed.
+func (rs *resourceServer) shouldRemoveSocketPathLocked() bool {
+	switch rs.socketOwner {
+	case socketOwnerUnknown:
+		log.Printf("skipping remove of %s: socket ownership unknown after Listen", rs.socketPath)
+		return false
+	case socketOwnerKnown:
+		if _, err := os.Lstat(rs.socketPath); err != nil {
+			if os.IsNotExist(err) {
+				return false
+			}
+			log.Printf("warning: skipping remove of %s: %v", rs.socketPath, err)
+			return false
+		}
+		if !socketPathOwnedSolelyBy(rs.socketPath, rs.socketIno) {
+			log.Printf("skipping remove of %s: path no longer refers to this server's socket", rs.socketPath)
+			return false
+		}
+		return true
+	default: // socketOwnerNone
+		return true
+	}
+}
+
+// Column indexes in /proc/net/unix rows:
+// Num RefCount Protocol Flags Type St Inode Path.
+const (
+	procNetUnixInodeField = 6
+	procNetUnixPathField  = 7
+)
+
+// unixSocketInodesForPath returns sockfs inodes bound to path in /proc/net/unix.
+//
+// /proc/net/unix only lists sockets of the reader's network namespace. The
+// ownership check is sound because the plugin DaemonSet runs with
+// hostNetwork: true, so the outgoing and the replacement pod share the host
+// namespace and each sees the other's binding. Without hostNetwork the old pod
+// would only see its own entry, treat itself as the sole owner and remove the
+// replacement's socket.
+// On Linux, Fstat on a Unix listen fd yields a sockfs inode that matches this
+// table, not the filesystem inode from Lstat on the pathname.
+func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
+	f, err := os.Open("/proc/net/unix")
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var inos []uint64
+	sc := bufio.NewScanner(f)
+	if !sc.Scan() {
+		return inos, sc.Err()
+	}
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		if len(fields) <= procNetUnixPathField {
+			continue
+		}
+		p := fields[procNetUnixPathField]
+		if len(fields) > procNetUnixPathField+1 {
+			p = strings.Join(fields[procNetUnixPathField:], " ")
+		}
+		if p != socketPath {
+			continue
+		}
+		ino, err := strconv.ParseUint(fields[procNetUnixInodeField], 10, 64)
+		if err != nil {
+			continue
+		}
+		inos = append(inos, ino)
+	}
+	return inos, sc.Err()
+}
+
+func socketPathOwnedSolelyBy(socketPath string, ino uint64) bool {
+	inos, err := unixSocketInodesForPath(socketPath)
+	if err != nil {
+		log.Printf("warning: cannot verify socket ownership for %s: %v", socketPath, err)
+		return false
+	}
+	return len(inos) == 1 && inos[0] == ino
+}
+
+// cleanup removes the registration socket pathname according to ownership.
+// Tests call cleanup(); Start uses cleanupLocked under lifecycleMu.
 func (rs *resourceServer) cleanup() error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	return rs.cleanupLocked()
+}
+
+// cleanupLocked removes the registration socket pathname.
+// socketOwnerNone: unconditional remove so Start can reclaim a stale sock.
+// socketOwnerKnown: remove only if this server is the sole /proc/net/unix binder.
+// socketOwnerUnknown: refuse remove (failed post-Listen capture).
+// Caller must hold lifecycleMu.
+func (rs *resourceServer) cleanupLocked() error {
+	if !rs.shouldRemoveSocketPathLocked() {
+		rs.clearSocketOwnershipLocked()
+		return nil
+	}
 	if err := os.Remove(rs.socketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-
+	rs.clearSocketOwnershipLocked()
 	return nil
 }
 

@@ -38,8 +38,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
+	"os"
 	"path"
+	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	cdiMocks "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi/mocks"
@@ -747,6 +752,345 @@ var _ = Describe("resourceServer tests", func() {
 		})
 	})
 
+	Context("socket cleanup ownership", func() {
+		It("removes the socket on cleanup when this server still owns the path", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-own-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketIDLocked(ln)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
+			Expect(rs.socketIno).To(BeZero())
+
+			_ = ln.Close()
+		})
+
+		It("does not remove a superseded socket owned by another instance", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-race-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			oldRS := &resourceServer{socketPath: sockPath}
+			oldRS.recordSocketIDLocked(oldLn)
+			oldIno := oldRS.socketIno
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
+			Expect(oldIno).NotTo(BeZero())
+
+			pathInoBefore, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Replacement Start: reclaim pathname and bind a new socket.
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			pathInoAfter, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pathInoAfter).NotTo(Equal(pathInoBefore))
+
+			// Closing the old listener must not unlink the path either:
+			// recordSocketIDLocked turns off unlink on close.
+			Expect(oldLn.Close()).To(Succeed())
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Old Stop must not unlink the replacement's active socket.
+			err = oldRS.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerNone))
+			Expect(oldRS.socketIno).To(BeZero())
+
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			pathInoFinal, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pathInoFinal).To(Equal(pathInoAfter))
+
+			Expect(newLn.Close()).To(Succeed())
+		})
+
+		It("real Stop keeps the socket a replacement instance has bound", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stop-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldRS := &resourceServer{
+				resourceName: "rdma/test",
+				socketName:   "test.sock",
+				socketPath:   sockPath,
+				watchMode:    true,
+				stopWatcher:  make(chan bool),
+				health:       make(chan *pluginapi.Device),
+				rsConnector:  &resourcesServerPort{},
+			}
+			Expect(oldRS.Start()).To(Succeed())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
+
+			// Replacement instance reclaims the path and binds its own socket.
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer newLn.Close()
+			newIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// The outgoing instance stops through the real grpc server and
+			// listener, which closes the old listener.
+			Expect(oldRS.Stop()).To(Succeed())
+
+			finalIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(finalIno).To(Equal(newIno))
+			conn, err := net.Dial("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			_ = conn.Close()
+		})
+
+		It("real Stop removes its own socket when no replacement holds the path", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stop-own-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			rs := &resourceServer{
+				resourceName: "rdma/test",
+				socketName:   "test.sock",
+				socketPath:   sockPath,
+				watchMode:    true,
+				stopWatcher:  make(chan bool),
+				health:       make(chan *pluginapi.Device),
+				rsConnector:  &resourcesServerPort{},
+			}
+			Expect(rs.Start()).To(Succeed())
+			Expect(rs.Stop()).To(Succeed())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+		})
+	})
+
+	Context("replacement binding after the outgoing ownership check", func() {
+		It("Stop does not unlink a socket a replacement binds at the Stop boundary", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-race-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			newRS := func(port types.ResourceServerPort) *resourceServer {
+				return &resourceServer{
+					resourceName: "rdma/test",
+					socketName:   "test.sock",
+					socketPath:   sockPath,
+					watchMode:    true,
+					stopWatcher:  make(chan bool),
+					health:       make(chan *pluginapi.Device),
+					rsConnector:  port,
+				}
+			}
+
+			replacement := newRS(&resourcesServerPort{})
+			replacementStarted := make(chan error, 1)
+			oldPort := &stopHookServerPort{resourcesServerPort: &resourcesServerPort{}}
+			oldRS := newRS(oldPort)
+			Expect(oldRS.Start()).To(Succeed())
+			Expect(oldRS.socketOwner).To(Equal(socketOwnerKnown))
+
+			// The outgoing instance has already passed its ownership check
+			// when its connector Stop runs. Start the replacement there, the
+			// window the old instance's os.Remove used to race with, and
+			// give it time to reclaim and bind before Stop returns.
+			oldPort.onStop = func() {
+				go func() { replacementStarted <- replacement.Start() }()
+				select {
+				case startErr := <-replacementStarted:
+					replacementStarted <- startErr
+				case <-time.After(300 * time.Millisecond):
+				}
+			}
+
+			Expect(oldRS.Stop()).To(Succeed())
+			Eventually(replacementStarted, 5*time.Second).Should(Receive(BeNil()))
+			defer func() { _ = replacement.Stop() }()
+
+			Expect(replacement.socketOwner).To(Equal(socketOwnerKnown))
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(socketPathOwnedSolelyBy(sockPath, replacement.socketIno)).To(BeTrue())
+			conn, err := net.Dial("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			_ = conn.Close()
+		})
+	})
+
+	Context("Stop and the socket watcher", func() {
+		It("does not hold lifecycleMu while signaling the watcher", func() {
+			grpcServer := grpc.NewServer()
+			rsc := mocks.NewMockResourceServerPort(GinkgoT())
+			inStop := make(chan struct{})
+			var once sync.Once
+			rsc.On("GetServer").Return(grpcServer).Run(func(mock.Arguments) {
+				once.Do(func() { close(inStop) })
+			})
+			rsc.On("Stop").Return()
+			rsc.On("DeleteServer").Return()
+
+			rs := &resourceServer{
+				rsConnector: rsc,
+				watchMode:   false,
+				stopWatcher: make(chan bool),
+			}
+
+			// Mimic Watch: it has just found the socket path missing and
+			// runs Restart, which takes lifecycleMu, before it gets back to
+			// reading stopWatcher.
+			watcherDone := make(chan struct{})
+			go func() {
+				defer close(watcherDone)
+				<-inStop
+				time.Sleep(100 * time.Millisecond)
+				func() {
+					rs.lifecycleMu.Lock()
+					defer rs.lifecycleMu.Unlock()
+				}()
+				<-rs.stopWatcher
+			}()
+
+			stopDone := make(chan error, 1)
+			go func() { stopDone <- rs.Stop() }()
+
+			Eventually(stopDone, 5*time.Second).Should(Receive(BeNil()))
+			Eventually(watcherDone, 5*time.Second).Should(BeClosed())
+		})
+	})
+
+	Context("socket cleanup ownership on start and rebind", func() {
+
+		It("Start cleanup still reclaims a stale socket before Listen", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stale-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			stale, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			// socketOwnerNone: unconditional reclaim used by Start before Listen.
+			rs := &resourceServer{socketPath: sockPath}
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ln.Close()).To(Succeed())
+			_ = stale.Close()
+		})
+
+		It("updates ownership after rebind so Stop removes the new socket", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-rebind-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln1, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketIDLocked(ln1)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			// Same-process Restart path: Start clears ownership then force-reclaims.
+			rs.lifecycleMu.Lock()
+			rs.clearSocketOwnershipLocked()
+			err = rs.cleanupLocked()
+			rs.lifecycleMu.Unlock()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
+			Expect(rs.socketIno).To(BeZero())
+			_ = ln1.Close()
+
+			ln2, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			rs.recordSocketIDLocked(ln2)
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
+			Expect(rs.socketIno).NotTo(BeZero())
+
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
+			Expect(rs.socketIno).To(BeZero())
+			_ = ln2.Close()
+		})
+
+		It("refuses Stop remove when post-Listen ownership capture failed", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-unknown-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			ln, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer ln.Close()
+
+			rs := &resourceServer{socketPath: sockPath, socketOwner: socketOwnerUnknown}
+			err = rs.cleanup()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(rs.socketOwner).To(Equal(socketOwnerNone))
+
+			_, err = os.Lstat(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("records identity from the listener fd not a raced pathname", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-listener-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			oldLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+
+			rs := &resourceServer{socketPath: sockPath}
+			rs.recordSocketIDLocked(oldLn)
+			oldIno := rs.socketIno
+			Expect(rs.socketOwner).To(Equal(socketOwnerKnown))
+
+			pathIno, err := pathInode(sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			// sockfs ino from the listener differs from the filesystem path ino.
+			Expect(oldIno).NotTo(Equal(pathIno))
+
+			Expect(os.Remove(sockPath)).To(Succeed())
+			newLn, err := net.Listen("unix", sockPath)
+			Expect(err).NotTo(HaveOccurred())
+			defer newLn.Close()
+
+			// Ownership still names the original listener inode after path rebind.
+			Expect(rs.socketIno).To(Equal(oldIno))
+
+			_ = oldLn.Close()
+		})
+	})
+
 	DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
 			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
@@ -781,3 +1125,30 @@ var _ = Describe("resourceServer tests", func() {
 		Entry("empty AllocateRequest", &pluginapi.AllocateRequest{}, 0, false),
 	)
 })
+
+func pathInode(p string) (uint64, error) {
+	fi, err := os.Lstat(p)
+	if err != nil {
+		return 0, err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	if !ok {
+		return 0, fmt.Errorf("unsupported stat type %T", fi.Sys())
+	}
+	return st.Ino, nil
+}
+
+// stopHookServerPort is a real resourcesServerPort whose Stop first runs
+// onStop, so a test can act at the boundary between the outgoing instance's
+// ownership check and its pathname unlink.
+type stopHookServerPort struct {
+	*resourcesServerPort
+	onStop func()
+}
+
+func (p *stopHookServerPort) Stop() {
+	if p.onStop != nil {
+		p.onStop()
+	}
+	p.resourcesServerPort.Stop()
+}
