@@ -41,9 +41,30 @@ kubectl apply -k .
 ```
 # How to use device plugin for RDMA
 
-The device plugin can be used with macvlan for RDMA, to do the following steps:
+The device plugin can be used with macvlan for RoCE (RDMA over Ethernet). The two plugins provide different parts of
+the pod configuration:
+
+- The [macvlan CNI plugin](https://www.cni.dev/plugins/current/main/macvlan/) creates a network interface in the pod,
+  backed by the host Ethernet interface specified by `master`. IPAM assigns the pod interface an IP address.
+- The RDMA shared device plugin advertises a Kubernetes extended resource for selected host RDMA devices. When a
+  container requests that resource, the plugin makes the associated RDMA character devices available to it
+  (directly, or through CDI when enabled).
+
+The macvlan interface itself is not an RDMA device or an RDMA extended resource. The RDMA capability comes from the
+underlying RDMA-capable NIC and its driver. Requesting a shared resource does not create a VF or dedicate a NIC to
+the pod; containers requesting the same resource share access to the selected RDMA devices.
+
+This example requires a RoCE-capable Ethernet NIC, a loaded RDMA kernel stack, and an application image with the
+RDMA userspace libraries and tools it needs. Use the same host interface for the macvlan `master` and the device
+plugin's `ifNames` selector. Adapt interface names and IP addressing to your nodes and network.
 
 **1.** use macvlan cni
+
+The following is a node CNI configuration for a setup where macvlan provides the pod network. If your cluster uses
+an existing primary CNI, configure macvlan as a secondary network through
+[Multus](https://github.com/k8snetworkplumbingwg/multus-cni) and attach that network to the pod instead of replacing
+the primary CNI configuration. A device-plugin resource request alone does not attach a network.
+With `host-local` IPAM, allocate non-overlapping address ranges on different nodes.
 
 ```
 # cat > /etc/cni/net.d/00-macvlan.conf <<EOF
@@ -69,11 +90,48 @@ EOF
 
 **2.** Follow the steps in the previous section to deploy the device plugin
 
+Before deploying, replace `data.config.json` in [the device-plugin ConfigMap](deployment/k8s/base/configmap.yaml)
+with a configuration selecting the host interface used above:
+
+```json
+{
+  "configList": [{
+    "resourceName": "hca_shared_devices_a",
+    "resourcePrefix": "rdma",
+    "rdmaHcaMax": 1000,
+    "selectors": {
+      "ifNames": ["enp0s0f0"]
+    }
+  }]
+}
+```
+
+This advertises `rdma/hca_shared_devices_a`. `rdmaHcaMax` sets the number of shared resource units advertised to
+Kubernetes; it does not create 1000 physical NICs or macvlan interfaces.
+
 **3.** Deploy RDMA pod application
+
+The application container must request the resource advertised in step 2. For example, include this in its
+container specification:
+
+```yaml
+resources:
+  limits:
+    rdma/hca_shared_devices_a: 1
+```
+
+See [the test pod](example/test-hca-pod.yaml) for a complete pod manifest. Adapt its image and command for your
+application, and attach the macvlan network if using Multus. Use the matching resource name if you changed the
+prefix or name in the device-plugin configuration.
 
 ```
 kubectl create -f <rdma-app.yaml>
 ```
+
+Verify that the node advertises the resource and that the container has both its macvlan interface/IP address and
+the RDMA devices under `/dev/infiniband`. Device visibility alone does not verify RDMA connectivity: run an RDMA
+test between pods using their macvlan IP addresses and confirm that your NIC, driver, and network support the
+intended RoCE configuration.
 
 # RDMA Shared Device Plugin Configurations
 
