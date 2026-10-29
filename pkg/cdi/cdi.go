@@ -137,14 +137,22 @@ func (c *impl) CreateContainerAnnotations(
 	return annotations, nil
 }
 
-// CleanupSpecs removes previously-created CDI specs
-func CleanupSpecs(specFilePrefix string) error {
+// CleanupSpecs removes previously-created CDI specs of the given kind.
+func CleanupSpecs(resourcePrefix, resourceKind string) error {
 	for _, dir := range cdi.GetRegistry().GetSpecDirectories() {
-		specs, err := filepath.Glob(filepath.Join(dir, specFilePrefix+"*"))
+		specs, err := filepath.Glob(filepath.Join(dir, resourcePrefix+"*"))
 		if err != nil {
 			return err
 		}
 		for _, spec := range specs {
+			parsed, err := cdi.ReadSpec(spec, 0)
+			if err != nil {
+				log.Printf("Skipping invalid CDI spec file %s: %v", spec, err)
+				continue
+			}
+			if parsed.Kind != resourcePrefix+"/"+resourceKind {
+				continue
+			}
 			log.Printf("Cleaning up CDI spec file: %s", spec)
 			if err := os.Remove(spec); err != nil {
 				return err
