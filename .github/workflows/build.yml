@@ -10,4 +10,5 @@ jobs:
     uses: Mellanox/cloud-orchestration-reusable-workflows/.github/workflows/go-ci-reusable.yml@main
     with:
       test-command: make test-coverage
+      coverage-file: k8s-rdma-shared-dev-plugin.cover
       apt-packages: hwdata
