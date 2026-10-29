@@ -523,11 +523,11 @@ var _ = Describe("resourceServer tests", func() {
 	Context("UpdateDevices", func() {
 		It("should receive signal of updating resource", func() {
 			rs := &resourceServer{
-				updateResource: make(chan bool),
+				updateResource: make(chan bool, 1),
 				rdmaHcaMax:     10,
 			}
 
-			go func() { rs.UpdateDevices(fakeDeviceList) }()
+			rs.UpdateDevices(fakeDeviceList)
 			Expect(<-rs.updateResource).To(BeTrue())
 			Expect(len(rs.deviceSpec)).To(Equal(1))
 			Expect(len(rs.devs)).To(Equal(10))
