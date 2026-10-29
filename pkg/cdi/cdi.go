@@ -35,6 +35,8 @@
 package cdi
 
 import (
+	"crypto/sha256"
+	"encoding/base32"
 	"errors"
 	"log"
 	"os"
@@ -50,7 +52,7 @@ import (
 type CDI interface {
 	CreateCDISpec(resourcePrefix, resourceName, poolName string, devices []types.PciNetDevice) error
 	CreateContainerAnnotations(
-		devices []types.PciNetDevice, resourcePrefix, resourceKind string) (map[string]string, error)
+		devices []types.PciNetDevice, resourcePrefix, resourceKind, poolName string) (map[string]string, error)
 }
 
 // impl implements CDI interface
@@ -111,12 +113,19 @@ func (c *impl) CreateCDISpec(
 
 // CreateContainerAnnotations creates container annotations based on CDI spec for a container runtime
 func (c *impl) CreateContainerAnnotations(
-	devices []types.PciNetDevice, resourceNamePrefix, resourceKind string) (map[string]string, error) {
+	devices []types.PciNetDevice, resourceNamePrefix, resourceKind, poolName string) (map[string]string, error) {
 	if len(devices) == 0 {
 		return nil, errors.New("devices list is empty")
 	}
+	if poolName == "" {
+		return nil, errors.New("pool name is empty")
+	}
 	annotations := make(map[string]string, 0)
-	annoKey, err := cdi.AnnotationKey(resourceNamePrefix, resourceKind)
+	// Kubelet merges annotations from every resource pool requested by a container.
+	// Identify the pool independently of its CDI kind, which multiple pools share.
+	// Hash the full resource name to keep the annotation name within 63 characters.
+	poolID := sha256.Sum256([]byte(resourceNamePrefix + "/" + poolName))
+	annoKey, err := cdi.AnnotationKey("rdmadp", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(poolID[:]))
 	if err != nil {
 		log.Printf("can not create container annotation: %q", err)
 		return nil, err
