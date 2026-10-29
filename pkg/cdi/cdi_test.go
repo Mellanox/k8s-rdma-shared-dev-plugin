@@ -36,6 +36,7 @@ package cdi_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -95,12 +96,64 @@ kind: test-prefix/test-name`
 			device := mocks.NewMockPciNetDevice(GinkgoT())
 			device.On("GetPciAddr").Return("0000:00:00.1")
 			cdi := cdi.New()
-			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device}, "example.com", "net")
+			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device}, "example.com", "net", "pool")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(annotations)).To(Equal(1))
-			annoKey := "cdi.k8s.io/example.com_net"
 			annoVal := "example.com/net=0000:00:00.1"
-			Expect(annotations[annoKey]).To(Equal(annoVal))
+			for key, val := range annotations {
+				Expect(key).To(MatchRegexp(`^cdi\.k8s\.io/rdmadp_[A-Z2-7]{52}$`))
+				Expect(val).To(Equal(annoVal))
+			}
+		})
+		It("should return distinct annotation keys for different pools", func() {
+			device1 := mocks.NewMockPciNetDevice(GinkgoT())
+			device1.On("GetPciAddr").Return("0000:00:00.1")
+			device2 := mocks.NewMockPciNetDevice(GinkgoT())
+			device2.On("GetPciAddr").Return("0000:00:00.2")
+			cdi := cdi.New()
+			annotations1, err := cdi.CreateContainerAnnotations(
+				[]types.PciNetDevice{device1}, "nvidia.com", "net-rdma", "rdma_pool_a")
+			Expect(err).NotTo(HaveOccurred())
+			annotations2, err := cdi.CreateContainerAnnotations(
+				[]types.PciNetDevice{device2}, "nvidia.com", "net-rdma", "rdma_pool_b")
+			Expect(err).NotTo(HaveOccurred())
+
+			merged := map[string]string{}
+			for k, v := range annotations1 {
+				merged[k] = v
+			}
+			for k, v := range annotations2 {
+				merged[k] = v
+			}
+			Expect(merged).To(HaveLen(2))
+			Expect(merged).To(ContainElements(
+				"nvidia.com/net-rdma=0000:00:00.1",
+				"nvidia.com/net-rdma=0000:00:00.2",
+			))
+		})
+		It("supports long resource names with stable, valid annotation keys", func() {
+			device1 := mocks.NewMockPciNetDevice(GinkgoT())
+			device1.On("GetPciAddr").Return("0000:00:00.1")
+			device2 := mocks.NewMockPciNetDevice(GinkgoT())
+			device2.On("GetPciAddr").Return("0000:00:00.2")
+			cdi := cdi.New()
+			prefix := strings.Repeat("a", 63) + ".example.com"
+			name := strings.Repeat("b", 63) + "_"
+			first, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device1}, prefix, "net-rdma", name)
+			Expect(err).NotTo(HaveOccurred())
+			second, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device2}, prefix, "net-rdma", name)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(first).To(HaveLen(1))
+			Expect(second).To(HaveLen(1))
+			for key := range first {
+				Expect(key).To(MatchRegexp(`^cdi\.k8s\.io/rdmadp_[A-Z2-7]{52}$`))
+				Expect(second).To(HaveKey(key))
+			}
+		})
+		It("should fail with empty pool name", func() {
+			device := mocks.NewMockPciNetDevice(GinkgoT())
+			_, err := cdi.New().CreateContainerAnnotations([]types.PciNetDevice{device}, "nvidia.com", "net-rdma", "")
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

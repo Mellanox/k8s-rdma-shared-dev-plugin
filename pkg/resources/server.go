@@ -407,7 +407,7 @@ func (rs *resourceServer) Allocate(_ context.Context, r *pluginapi.AllocateReque
 		if rs.useCdi {
 			var err error
 			ress[i].Annotations, err = rs.cdi.CreateContainerAnnotations(
-				rs.pciDevices, cdiResourcePrefix, cdiResourceKind)
+				rs.pciDevices, cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName)
 			if err != nil {
 				return nil, fmt.Errorf("cant create container annotation: %s", err)
 			}

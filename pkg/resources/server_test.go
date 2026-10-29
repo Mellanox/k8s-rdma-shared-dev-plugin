@@ -481,16 +481,16 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(len(res.ContainerResponses)).To(Equal(2))
 		})
 		It("Allocate calls CDI when configured", func() {
-			rs := resourceServer{resourceName: "fake", socketName: "fake.sock", useCdi: true}
+			rs := resourceServer{resourceName: "fake", socketName: "fake.sock", useCdi: true, cdiResourceName: "pool"}
 			req := &pluginapi.AllocateRequest{
 				ContainerRequests: []*pluginapi.ContainerAllocateRequest{nil, nil},
 			}
 			cdi := &cdiMocks.CDI{}
-			cdi.On("CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything).Return(nil, nil)
+			cdi.On("CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything, "pool").Return(nil, nil)
 			rs.cdi = cdi
 			_, err := rs.Allocate(context.TODO(), req)
 			Expect(err).ToNot(HaveOccurred())
-			cdi.AssertCalled(GinkgoT(), "CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything)
+			cdi.AssertCalled(GinkgoT(), "CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything, "pool")
 		})
 	})
 	Context("GetInfo", func() {
