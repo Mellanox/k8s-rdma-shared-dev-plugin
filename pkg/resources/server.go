@@ -104,6 +104,8 @@ type resourceServer struct {
 	mutex sync.RWMutex
 	// lifecycleMu serializes Start/Stop/Restart and socket ownership cleanup
 	lifecycleMu     sync.Mutex
+	stopping        bool
+	generation      uint64
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
 	pciDevices      []types.PciNetDevice
@@ -238,6 +240,8 @@ func (rs *resourceServer) Start() error {
 }
 
 func (rs *resourceServer) startLocked() error {
+	rs.stopping = false
+	rs.generation++
 	// Reclaim, bind and identity capture run under the cross-process path
 	// lock so an outgoing instance cannot pass its ownership check and then
 	// unlink the socket bound here (see lockSocketPath).
@@ -258,7 +262,7 @@ func (rs *resourceServer) startLocked() error {
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
 	}
-	pluginapi.RegisterDevicePluginServer(rs.rsConnector.GetServer(), rs)
+	pluginapi.RegisterDevicePluginServer(rs.rsConnector.GetServer(), &resourceServerInstance{rs, rs.generation})
 
 	rs.rsConnector.Serve(sock)
 
@@ -289,6 +293,9 @@ func (rs *resourceServer) startLocked() error {
 // just decided to restart.
 func (rs *resourceServer) Stop() error {
 	rs.lifecycleMu.Lock()
+	// Invalidate queued recovery before waiting for the legacy watcher.
+	rs.stopping = true
+	rs.generation++
 	running := rs.rsConnector != nil && rs.rsConnector.GetServer() != nil
 	rs.lifecycleMu.Unlock()
 	if !running {
@@ -383,6 +390,13 @@ func lockSocketPath(socketPath string) func() {
 func (rs *resourceServer) Restart() error {
 	rs.lifecycleMu.Lock()
 	defer rs.lifecycleMu.Unlock()
+	return rs.restartLocked()
+}
+
+func (rs *resourceServer) restartLocked() error {
+	if rs.stopping {
+		return nil
+	}
 
 	log.Printf("restarting %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
@@ -393,6 +407,17 @@ func (rs *resourceServer) Restart() error {
 	rs.rsConnector.DeleteServer()
 
 	return rs.startLocked()
+}
+
+// restartIfCurrent serializes recovery with shutdown and ignores callbacks from
+// replaced instances, including cancellation caused by an intentional Restart.
+func (rs *resourceServer) restartIfCurrent(generation uint64) error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	if rs.stopping || generation != rs.generation {
+		return nil
+	}
+	return rs.restartLocked()
 }
 
 // Watch for Kubelet socket file; if not present restart server
@@ -441,7 +466,23 @@ func (rs *resourceServer) register() error {
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	rs.lifecycleMu.Lock()
+	instance := &resourceServerInstance{rs, rs.generation}
+	rs.lifecycleMu.Unlock()
+	return instance.ListAndWatch(e, s)
+}
+
+// Bind each handler to its serving instance: even a delayed RPC on an old
+// server must not restart its replacement. All other RPCs use resourceServer.
+type resourceServerInstance struct {
+	*resourceServer
+	generation uint64
+}
+
+func (instance *resourceServerInstance) ListAndWatch(_ *pluginapi.Empty,
+	s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	rs := instance.resourceServer
 	log.Printf("ListAndWatch called by kubelet for: %s", rs.resourceName)
 	resp := new(pluginapi.ListAndWatchResponse)
 
@@ -462,6 +503,12 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 		select {
 		case <-s.Context().Done():
 			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
+			// Stop asynchronously rather than stopping this RPC's server inline.
+			go func() {
+				if err := rs.restartIfCurrent(instance.generation); err != nil {
+					log.Printf("unable to restart %s after ListAndWatch closed: %v", rs.resourceName, err)
+				}
+			}()
 			return nil
 		case d := <-rs.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
