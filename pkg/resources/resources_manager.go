@@ -243,7 +243,7 @@ func (rm *resourceManager) InitServers() error {
 		}
 
 		if rm.useCdi {
-			err := cdi.CleanupSpecs(cdiResourcePrefix)
+			err := cdi.CleanupSpecs(cdiResourcePrefix, cdiResourceKind)
 			if err != nil {
 				return err
 			}
@@ -275,7 +275,7 @@ func (rm *resourceManager) StartAllServers() error {
 // StopAllServers stop all servers
 func (rm *resourceManager) StopAllServers() error {
 	if rm.useCdi {
-		err := cdi.CleanupSpecs(cdiResourcePrefix)
+		err := cdi.CleanupSpecs(cdiResourcePrefix, cdiResourceKind)
 		if err != nil {
 			return err
 		}
@@ -291,7 +291,7 @@ func (rm *resourceManager) StopAllServers() error {
 // RestartAllServers restart all servers
 func (rm *resourceManager) RestartAllServers() error {
 	if rm.useCdi {
-		err := cdi.CleanupSpecs(cdiResourcePrefix)
+		err := cdi.CleanupSpecs(cdiResourcePrefix, cdiResourceKind)
 		if err != nil {
 			return err
 		}
