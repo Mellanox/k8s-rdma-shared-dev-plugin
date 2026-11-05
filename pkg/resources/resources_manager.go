@@ -232,7 +232,7 @@ func (rm *resourceManager) InitServers() error {
 				continue
 			}
 
-			if rm.netlinkManager.LinkSetUp(link) != nil {
+			if err := rm.netlinkManager.LinkSetUp(link); err != nil {
 				log.Printf("Warning: InitServers(): unable to set NIC %s to up state: %s", device.GetIfName(), err)
 				continue
 			}
