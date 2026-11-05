@@ -26,25 +26,25 @@ func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolNam
 	return r0
 }
 
-// CreateContainerAnnotations provides a mock function with given fields: devices, resourcePrefix, resourceKind
-func (_m *CDI) CreateContainerAnnotations(devices []types.PciNetDevice, resourcePrefix string, resourceKind string) (map[string]string, error) {
-	ret := _m.Called(devices, resourcePrefix, resourceKind)
+// CreateContainerAnnotations provides a mock function with given fields: devices, resourcePrefix, resourceKind, poolName
+func (_m *CDI) CreateContainerAnnotations(devices []types.PciNetDevice, resourcePrefix string, resourceKind string, poolName string) (map[string]string, error) {
+	ret := _m.Called(devices, resourcePrefix, resourceKind, poolName)
 
 	var r0 map[string]string
 	var r1 error
-	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string) (map[string]string, error)); ok {
-		return rf(devices, resourcePrefix, resourceKind)
+	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string) (map[string]string, error)); ok {
+		return rf(devices, resourcePrefix, resourceKind, poolName)
 	}
-	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string) map[string]string); ok {
-		r0 = rf(devices, resourcePrefix, resourceKind)
+	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string) map[string]string); ok {
+		r0 = rf(devices, resourcePrefix, resourceKind, poolName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(map[string]string)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func([]types.PciNetDevice, string, string) error); ok {
-		r1 = rf(devices, resourcePrefix, resourceKind)
+	if rf, ok := ret.Get(1).(func([]types.PciNetDevice, string, string, string) error); ok {
+		r1 = rf(devices, resourcePrefix, resourceKind, poolName)
 	} else {
 		r1 = ret.Error(1)
 	}
