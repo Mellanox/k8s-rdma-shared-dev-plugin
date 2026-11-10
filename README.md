@@ -184,7 +184,7 @@ The following selectors are used for filtering the desired devices.
 |    Field    |                          Description                           |     Type      |         Example          |
 |-------------|----------------------------------------------------------------|---------------|--------------------------|
 | "vendors"   | Target device's vendor Hex code as string                      | `string` list | "vendors": ["15b3"]      |
-| "deviceIDs" | Target device's device Hex code as string                      | `string` list | "devices": ["1017"]      |
+| "deviceIDs" | Target device's device Hex code as string                      | `string` list | "deviceIDs": ["1017"]    |
 | "drivers"   | Target device driver names as string                           | `string` list | "drivers": ["mlx5_core"] |
 | "ifNames"   | Target device name                                             | `string` list | "ifNames": ["enp2s2f0"]  |
 | "linkTypes" | The link type of the net device associated with the PCI device | `string` list | "linkTypes": ["ether"]   |
