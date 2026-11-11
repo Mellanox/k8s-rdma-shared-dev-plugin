@@ -86,9 +86,43 @@ devices:
     - hostPath: host_path
       path: container_path
       permissions: rw
-  name: "0000:00:00.1"
+  name: test-pool_0000:00:00.1
 kind: test-prefix/test-name`
 			Expect(string(cdiSpec)).To(ContainSubstring(substring))
+		})
+	})
+	Context("device selected by more than one resource pool", func() {
+		It("should keep the device resolvable for every pool", func() {
+			fs := &utils.FakeFilesystem{
+				Dirs: []string{"cdi_static", "cdi_dynamic"},
+			}
+			defer fs.Use()()
+			registry := cdiLib.GetRegistry(cdiLib.WithSpecDirs(fs.RootDir+"/cdi_static", fs.RootDir+"/cdi_dynamic"))
+
+			device := mocks.NewMockPciNetDevice(GinkgoT())
+			device.On("GetPciAddr").Return("0000:00:00.1")
+			device.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{
+				{HostPath: "/dev/infiniband/uverbs0", ContainerPath: "/dev/infiniband/uverbs0"},
+			})
+			devices := []types.PciNetDevice{device}
+			pools := []string{"rdma_pool_a", "rdma_pool_b"}
+
+			for _, pool := range pools {
+				Expect(cdi.New().CreateCDISpec("nvidia.com", "net-rdma", pool, devices)).To(Succeed())
+			}
+			Expect(registry.Refresh()).To(Succeed())
+
+			// A container runtime resolves the devices named in the
+			// annotations returned by Allocate.
+			for _, pool := range pools {
+				annotations, err := cdi.New().CreateContainerAnnotations(devices, "nvidia.com", "net-rdma", pool)
+				Expect(err).NotTo(HaveOccurred())
+				_, cdiDevices, err := cdiLib.ParseAnnotations(annotations)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(cdiDevices).To(HaveLen(1))
+
+				Expect(registry.DeviceDB().GetDevice(cdiDevices[0])).NotTo(BeNil())
+			}
 		})
 	})
 	Context("successfully create container annotation", func() {
@@ -99,7 +133,7 @@ kind: test-prefix/test-name`
 			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device}, "example.com", "net", "pool")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(annotations)).To(Equal(1))
-			annoVal := "example.com/net=0000:00:00.1"
+			annoVal := "example.com/net=pool_0000:00:00.1"
 			for key, val := range annotations {
 				Expect(key).To(MatchRegexp(`^cdi\.k8s\.io/rdmadp_[A-Z2-7]{52}$`))
 				Expect(val).To(Equal(annoVal))
@@ -127,8 +161,8 @@ kind: test-prefix/test-name`
 			}
 			Expect(merged).To(HaveLen(2))
 			Expect(merged).To(ContainElements(
-				"nvidia.com/net-rdma=0000:00:00.1",
-				"nvidia.com/net-rdma=0000:00:00.2",
+				"nvidia.com/net-rdma=rdma_pool_a_0000:00:00.1",
+				"nvidia.com/net-rdma=rdma_pool_b_0000:00:00.2",
 			))
 		})
 		It("supports long resource names with stable, valid annotation keys", func() {

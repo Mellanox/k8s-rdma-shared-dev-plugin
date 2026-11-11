@@ -87,7 +87,7 @@ func (c *impl) CreateCDISpec(
 		}
 
 		device := cdiSpecs.Device{
-			Name:           dev.GetPciAddr(),
+			Name:           deviceName(poolName, dev.GetPciAddr()),
 			ContainerEdits: containerEdit,
 		}
 		cdiSpec.Devices = append(cdiSpec.Devices, device)
@@ -111,6 +111,14 @@ func (c *impl) CreateCDISpec(
 	return nil
 }
 
+// deviceName returns the CDI device name of a PCI device in a resource pool.
+// Every pool writes its own spec file of the same CDI kind, and a device may be
+// selected by more than one pool. CDI refuses to resolve a name that two spec
+// files define, so the name has to be unique per pool.
+func deviceName(poolName, pciAddr string) string {
+	return poolName + "_" + pciAddr
+}
+
 // CreateContainerAnnotations creates container annotations based on CDI spec for a container runtime
 func (c *impl) CreateContainerAnnotations(
 	devices []types.PciNetDevice, resourceNamePrefix, resourceKind, poolName string) (map[string]string, error) {
@@ -132,7 +140,8 @@ func (c *impl) CreateContainerAnnotations(
 	}
 	deviceNames := make([]string, len(devices))
 	for i, dev := range devices {
-		deviceNames[i] = cdi.QualifiedName(resourceNamePrefix, resourceKind, dev.GetPciAddr())
+		deviceNames[i] = cdi.QualifiedName(
+			resourceNamePrefix, resourceKind, deviceName(poolName, dev.GetPciAddr()))
 	}
 	annoValue, err := cdi.AnnotationValue(deviceNames)
 	if err != nil {
