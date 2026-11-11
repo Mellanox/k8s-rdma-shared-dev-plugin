@@ -633,11 +633,20 @@ func (rs *resourceServer) shouldRemoveSocketPathLocked() bool {
 // Column indexes in /proc/net/unix rows:
 // Num RefCount Protocol Flags Type St Inode Path.
 const (
+	procNetUnixFlagsField = 3
 	procNetUnixInodeField = 6
 	procNetUnixPathField  = 7
+	// procNetUnixListenFlag is __SO_ACCEPTCON, set in Flags for listening sockets.
+	procNetUnixListenFlag = 0x10000
 )
 
-// unixSocketInodesForPath returns sockfs inodes bound to path in /proc/net/unix.
+// unixSocketInodesForPath returns sockfs inodes of the listening sockets bound
+// to path in /proc/net/unix.
+//
+// Sockets accepted from a listener are listed under the listener's path with
+// their own inode, so each open client connection (kubelet keeps one for the
+// ListAndWatch stream) adds a row for the same path. Only listening sockets
+// can own the pathname; the rest are skipped.
 //
 // /proc/net/unix only lists sockets of the reader's network namespace. The
 // ownership check is sound because the plugin DaemonSet runs with
@@ -669,6 +678,10 @@ func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
 			p = strings.Join(fields[procNetUnixPathField:], " ")
 		}
 		if p != socketPath {
+			continue
+		}
+		flags, err := strconv.ParseUint(fields[procNetUnixFlagsField], 16, 32)
+		if err != nil || flags&procNetUnixListenFlag == 0 {
 			continue
 		}
 		ino, err := strconv.ParseUint(fields[procNetUnixInodeField], 10, 64)

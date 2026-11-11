@@ -57,6 +57,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 	registerapi "k8s.io/kubelet/pkg/apis/pluginregistration/v1"
 )
@@ -879,6 +880,43 @@ var _ = Describe("resourceServer tests", func() {
 				rsConnector:  &resourcesServerPort{},
 			}
 			Expect(rs.Start()).To(Succeed())
+			Expect(rs.Stop()).To(Succeed())
+			_, err = os.Lstat(sockPath)
+			Expect(os.IsNotExist(err)).To(BeTrue())
+		})
+
+		It("real Stop removes its own socket while kubelet holds a ListAndWatch stream", func() {
+			dir, err := os.MkdirTemp("", "rdma-sock-stop-conn-*")
+			Expect(err).NotTo(HaveOccurred())
+			defer os.RemoveAll(dir)
+			sockPath := filepath.Join(dir, "test.sock")
+
+			rs := &resourceServer{
+				resourceName:   "rdma/test",
+				socketName:     "test.sock",
+				socketPath:     sockPath,
+				watchMode:      true,
+				stopWatcher:    make(chan bool),
+				updateResource: make(chan bool, 1),
+				health:         make(chan *pluginapi.Device),
+				rsConnector:    &resourcesServerPort{},
+			}
+			Expect(rs.Start()).To(Succeed())
+
+			// Kubelet keeps a connection with an open ListAndWatch stream for
+			// as long as the plugin is registered. The accepted socket of that
+			// connection is listed in /proc/net/unix under the same path as
+			// the listener.
+			conn, err := grpc.NewClient("unix://"+sockPath,
+				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			Expect(err).NotTo(HaveOccurred())
+			defer conn.Close()
+			stream, err := pluginapi.NewDevicePluginClient(conn).ListAndWatch(
+				context.Background(), &pluginapi.Empty{})
+			Expect(err).NotTo(HaveOccurred())
+			_, err = stream.Recv()
+			Expect(err).NotTo(HaveOccurred())
+
 			Expect(rs.Stop()).To(Succeed())
 			_, err = os.Lstat(sockPath)
 			Expect(os.IsNotExist(err)).To(BeTrue())
