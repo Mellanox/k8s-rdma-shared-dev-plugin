@@ -296,3 +296,73 @@ func awaitLifecycleOperations(t *testing.T, operations ...<-chan error) {
 		}
 	}
 }
+
+// A send error must recover even when Context.Done has not fired yet.
+type recoveryFailingStream struct {
+	grpc.ServerStream
+	sends  int
+	failAt int
+}
+
+func (*recoveryFailingStream) Context() context.Context { return context.Background() }
+func (s *recoveryFailingStream) Send(*pluginapi.ListAndWatchResponse) error {
+	s.sends++
+	if s.sends == s.failAt {
+		return fmt.Errorf("transport closed")
+	}
+	return nil
+}
+func TestRecoveryAfterSendFailure(t *testing.T) {
+	for _, failAt := range []int{1, 2} {
+		t.Run(fmt.Sprint(failAt), func(t *testing.T) {
+			rs, _ := newRecoveryServer(t, true)
+			generation := recoveryGeneration(rs)
+			rs.updateResource <- true
+			instance := &resourceServerInstance{rs, generation}
+			if err := instance.ListAndWatch(nil, &recoveryFailingStream{failAt: failAt}); err == nil {
+				t.Fatal("expected send error")
+			}
+			awaitRecovery(t, rs, generation)
+			openRecoveryStream(t, rs)
+		})
+	}
+}
+func TestRecoveryPreservesReplacementSocket(t *testing.T) {
+	old, port := newRecoveryServer(t, true)
+	generation := recoveryGeneration(old)
+	replacement := &resourceServer{socketPath: old.socketPath, socketName: old.socketName, watchMode: true,
+		rsConnector: &resourcesServerPort{}, devs: old.devs, updateResource: make(chan bool, 1)}
+	if err := replacement.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = replacement.Stop() })
+	before, err := os.Lstat(old.socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = old.restartIfCurrent(generation); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Lstat(old.socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) || port.creates.Load() != 1 {
+		t.Fatal("old instance reclaimed replacement socket")
+	}
+	openRecoveryStream(t, replacement)
+}
+func TestRecoveryAfterSocketRemoval(t *testing.T) {
+	rs, port := newRecoveryServer(t, true)
+	generation := recoveryGeneration(rs)
+	if err := os.Remove(rs.socketPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := rs.restartIfCurrent(generation); err != nil {
+		t.Fatal(err)
+	}
+	openRecoveryStream(t, rs)
+	if port.creates.Load() != 2 {
+		t.Fatal("missing socket did not recover")
+	}
+}
