@@ -911,8 +911,10 @@ var _ = Describe("resourceServer tests", func() {
 				grpc.WithTransportCredentials(insecure.NewCredentials()))
 			Expect(err).NotTo(HaveOccurred())
 			defer conn.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
 			stream, err := pluginapi.NewDevicePluginClient(conn).ListAndWatch(
-				context.Background(), &pluginapi.Empty{})
+				ctx, &pluginapi.Empty{})
 			Expect(err).NotTo(HaveOccurred())
 			_, err = stream.Recv()
 			Expect(err).NotTo(HaveOccurred())
