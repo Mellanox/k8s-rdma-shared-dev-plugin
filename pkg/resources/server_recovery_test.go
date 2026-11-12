@@ -366,3 +366,78 @@ func TestRecoveryAfterSocketRemoval(t *testing.T) {
 		t.Fatal("missing socket did not recover")
 	}
 }
+
+func TestRecoveryOfReplacementDuringOverlap(t *testing.T) {
+	for _, watchMode := range []bool{true, false} {
+		t.Run(fmt.Sprintf("watchMode=%t", watchMode), func(t *testing.T) {
+			testReplacementOverlap(t, watchMode)
+		})
+	}
+}
+
+func testReplacementOverlap(t *testing.T, watchMode bool) {
+	t.Helper()
+
+	old, oldPort := newRecoveryServer(t, true)
+	registration := &recoveryRegistrationServer{}
+	if !watchMode {
+		listener, err := net.Listen("unix", filepath.Join(old.deprecatedSockDir, kubeEndPoint))
+		if err != nil {
+			t.Fatal(err)
+		}
+		server := grpc.NewServer()
+		pluginapi.RegisterRegistrationServer(server, registration)
+		go func() { _ = server.Serve(listener) }()
+		t.Cleanup(server.Stop)
+	}
+	port := &recoveryServerPort{}
+	replacement := &resourceServer{socketPath: old.socketPath, socketName: old.socketName,
+		deprecatedSockDir: old.deprecatedSockDir, watchMode: watchMode,
+		rsConnector: port, devs: old.devs, updateResource: make(chan bool, 1), stopWatcher: make(chan bool, 1)}
+	if err := replacement.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = replacement.Stop() })
+	inos, err := unixSocketInodesForPathFiltered(old.socketPath, true)
+	if err != nil || len(inos) != 2 {
+		t.Fatalf("expected overlapping listeners: %v, %v", inos, err)
+	}
+	generation := recoveryGeneration(replacement)
+	_, cancel := openRecoveryStream(t, replacement)
+	cancel()
+	awaitRecovery(t, replacement, generation)
+	stream, _ := openRecoveryStream(t, replacement)
+	if port.creates.Load() != 2 {
+		t.Fatalf("replacement starts=%d, want 2", port.creates.Load())
+	}
+	if !watchMode && registration.calls.Load() != 2 {
+		t.Fatalf("registrations=%d, want 2", registration.calls.Load())
+	}
+	before, err := os.Lstat(old.socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = old.restartIfCurrent(recoveryGeneration(old)); err != nil {
+		t.Fatal(err)
+	}
+	if oldPort.creates.Load() != 1 {
+		t.Fatal("old instance restarted")
+	}
+	if err = old.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.Lstat(old.socketPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(before, after) {
+		t.Fatal("old instance changed replacement socket")
+	}
+	// Prove the recovered stream still delivers updates after the old listener closes.
+	replacement.updateResource <- true
+	response, err := stream.Recv()
+	if err != nil || len(response.GetDevices()) != 1 {
+		t.Fatalf("update after old Stop: %v, %v", response, err)
+	}
+	openRecoveryStream(t, replacement)
+}

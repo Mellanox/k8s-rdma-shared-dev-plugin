@@ -450,7 +450,17 @@ func (rs *resourceServer) canRecoverSocketLocked() bool {
 		return false
 	}
 	inos, err := unixSocketInodesForPathFiltered(rs.socketPath, true)
-	return err == nil && len(inos) == 1 && inos[0] == rs.socketIno
+	if err != nil {
+		return false
+	}
+	// SameFile identifies the current binding. Older, unlinked listeners may
+	// still appear under the same path until their owning instances stop.
+	for _, ino := range inos {
+		if ino == rs.socketIno {
+			return true
+		}
+	}
+	return false
 }
 
 // Watch for Kubelet socket file; if not present restart server
