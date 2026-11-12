@@ -95,6 +95,7 @@ type resourceServer struct {
 	// not Lstat on the shared path. See socketOwner* constants.
 	socketOwner    uint8
 	socketIno      uint64
+	socketFileInfo os.FileInfo
 	stopWatcher    chan bool
 	updateResource chan bool
 	health         chan *pluginapi.Device
@@ -104,6 +105,8 @@ type resourceServer struct {
 	mutex sync.RWMutex
 	// lifecycleMu serializes Start/Stop/Restart and socket ownership cleanup
 	lifecycleMu     sync.Mutex
+	stopping        bool
+	generation      uint64
 	devs            []*pluginapi.Device
 	deviceSpec      []*pluginapi.DeviceSpec
 	pciDevices      []types.PciNetDevice
@@ -238,10 +241,16 @@ func (rs *resourceServer) Start() error {
 }
 
 func (rs *resourceServer) startLocked() error {
+	return rs.startWithPathLockLocked(lockSocketPath(rs.socketPath))
+}
+
+// Caller holds lifecycleMu and the path lock; release the latter after binding.
+func (rs *resourceServer) startWithPathLockLocked(unlock func()) error {
+	rs.stopping = false
+	rs.generation++
 	// Reclaim, bind and identity capture run under the cross-process path
 	// lock so an outgoing instance cannot pass its ownership check and then
 	// unlink the socket bound here (see lockSocketPath).
-	unlock := lockSocketPath(rs.socketPath)
 	// Pre-listen reclaim: clear ownership so cleanup force-removes any stale sock.
 	rs.clearSocketOwnershipLocked()
 	_ = rs.cleanupLocked()
@@ -253,12 +262,13 @@ func (rs *resourceServer) startLocked() error {
 		return err
 	}
 	rs.recordSocketIDLocked(sock)
+	rs.socketFileInfo, _ = os.Lstat(rs.socketPath)
 	unlock()
 
 	if rs.watchMode {
 		registerapi.RegisterRegistrationServer(rs.rsConnector.GetServer(), rs)
 	}
-	pluginapi.RegisterDevicePluginServer(rs.rsConnector.GetServer(), rs)
+	pluginapi.RegisterDevicePluginServer(rs.rsConnector.GetServer(), &resourceServerInstance{rs, rs.generation})
 
 	rs.rsConnector.Serve(sock)
 
@@ -289,6 +299,9 @@ func (rs *resourceServer) startLocked() error {
 // just decided to restart.
 func (rs *resourceServer) Stop() error {
 	rs.lifecycleMu.Lock()
+	// Invalidate queued recovery before waiting for the legacy watcher.
+	rs.stopping = true
+	rs.generation++
 	running := rs.rsConnector != nil && rs.rsConnector.GetServer() != nil
 	rs.lifecycleMu.Unlock()
 	if !running {
@@ -383,6 +396,13 @@ func lockSocketPath(socketPath string) func() {
 func (rs *resourceServer) Restart() error {
 	rs.lifecycleMu.Lock()
 	defer rs.lifecycleMu.Unlock()
+	return rs.restartLocked()
+}
+
+func (rs *resourceServer) restartLocked() error {
+	if rs.stopping {
+		return nil
+	}
 
 	log.Printf("restarting %s device plugin server...", rs.resourceName)
 	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
@@ -393,6 +413,54 @@ func (rs *resourceServer) Restart() error {
 	rs.rsConnector.DeleteServer()
 
 	return rs.startLocked()
+}
+
+// restartIfCurrent serializes recovery with shutdown and ignores callbacks from
+// replaced instances, including cancellation caused by an intentional Restart.
+func (rs *resourceServer) restartIfCurrent(generation uint64) error {
+	rs.lifecycleMu.Lock()
+	defer rs.lifecycleMu.Unlock()
+	if rs.stopping || generation != rs.generation {
+		return nil
+	}
+	// Keep ownership validation and rebind in one cross-process critical section.
+	unlock := lockSocketPath(rs.socketPath)
+	if !rs.canRecoverSocketLocked() {
+		unlock()
+		log.Printf("skipping recovery of %s: socket ownership changed or cannot be verified", rs.resourceName)
+		return nil
+	}
+	if rs.rsConnector == nil || rs.rsConnector.GetServer() == nil {
+		unlock()
+		return nil
+	}
+	rs.rsConnector.Stop()
+	rs.rsConnector.DeleteServer()
+	return rs.startWithPathLockLocked(unlock)
+}
+
+// Caller holds lifecycleMu and the path lock. Inspect listeners only: accepted
+// connections also carry the path in /proc/net/unix but do not own the binding.
+func (rs *resourceServer) canRecoverSocketLocked() bool {
+	info, err := os.Lstat(rs.socketPath)
+	if os.IsNotExist(err) {
+		return true
+	}
+	if err != nil || rs.socketFileInfo == nil || !os.SameFile(info, rs.socketFileInfo) {
+		return false
+	}
+	inos, err := unixSocketInodesForPathFiltered(rs.socketPath, true)
+	if err != nil {
+		return false
+	}
+	// SameFile identifies the current binding. Older, unlinked listeners may
+	// still appear under the same path until their owning instances stop.
+	for _, ino := range inos {
+		if ino == rs.socketIno {
+			return true
+		}
+	}
+	return false
 }
 
 // Watch for Kubelet socket file; if not present restart server
@@ -441,12 +509,37 @@ func (rs *resourceServer) register() error {
 }
 
 // ListAndWatch lists devices and update that list according to the health status
-func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+func (rs *resourceServer) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	rs.lifecycleMu.Lock()
+	instance := &resourceServerInstance{rs, rs.generation}
+	rs.lifecycleMu.Unlock()
+	return instance.ListAndWatch(e, s)
+}
+
+// Bind each handler to its serving instance: even a delayed RPC on an old
+// server must not restart its replacement. All other RPCs use resourceServer.
+type resourceServerInstance struct {
+	*resourceServer
+	generation uint64
+}
+
+func (instance *resourceServerInstance) recoverStream() {
+	go func() {
+		if err := instance.restartIfCurrent(instance.generation); err != nil {
+			log.Printf("unable to restart %s after ListAndWatch closed: %v", instance.resourceName, err)
+		}
+	}()
+}
+
+func (instance *resourceServerInstance) ListAndWatch(_ *pluginapi.Empty,
+	s pluginapi.DevicePlugin_ListAndWatchServer) error {
+	rs := instance.resourceServer
 	log.Printf("ListAndWatch called by kubelet for: %s", rs.resourceName)
 	resp := new(pluginapi.ListAndWatchResponse)
 
 	// Send initial list of devices
 	if err := rs.sendDevices(resp, s); err != nil {
+		instance.recoverStream()
 		return err
 	}
 
@@ -462,16 +555,22 @@ func (rs *resourceServer) ListAndWatch(_ *pluginapi.Empty, s pluginapi.DevicePlu
 		select {
 		case <-s.Context().Done():
 			log.Printf("ListAndWatch stream close: %v", s.Context().Err())
+			// Stop asynchronously rather than stopping this RPC's server inline.
+			instance.recoverStream()
 			return nil
 		case d := <-rs.health:
 			// FIXME: there is no way to recover from the Unhealthy state.
 			d.Health = pluginapi.Unhealthy
-			_ = s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs})
+			if err := s.Send(&pluginapi.ListAndWatchResponse{Devices: rs.devs}); err != nil {
+				instance.recoverStream()
+				return err
+			}
 		case <-rs.updateResource:
 			if err := rs.sendDevices(resp, s); err != nil {
 				// The old stream may not be closed properly, return to close it
 				// and pass the update event to the new stream for processing
 				rs.notifyUpdate()
+				instance.recoverStream()
 				return err
 			}
 			err := rs.updateCDISpec()
@@ -648,6 +747,10 @@ const (
 // On Linux, Fstat on a Unix listen fd yields a sockfs inode that matches this
 // table, not the filesystem inode from Lstat on the pathname.
 func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
+	return unixSocketInodesForPathFiltered(socketPath, false)
+}
+
+func unixSocketInodesForPathFiltered(socketPath string, listenersOnly bool) ([]uint64, error) {
 	f, err := os.Open("/proc/net/unix")
 	if err != nil {
 		return nil, err
@@ -662,6 +765,10 @@ func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
 		if len(fields) <= procNetUnixPathField {
+			continue
+		}
+		// SO_ACCEPTCON marks a listening Unix socket.
+		if listenersOnly && fields[3] != "00010000" {
 			continue
 		}
 		p := fields[procNetUnixPathField]
