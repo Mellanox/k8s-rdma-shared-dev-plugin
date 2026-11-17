@@ -100,7 +100,13 @@ kind: test-prefix/test-name`
 				Dirs: []string{"cdi_static", "cdi_dynamic"},
 			}
 			defer fs.Use()()
-			registry := cdiLib.GetRegistry(cdiLib.WithSpecDirs(fs.RootDir+"/cdi_static", fs.RootDir+"/cdi_dynamic"))
+			registry := cdiLib.GetRegistry()
+			previousDirs := registry.GetSpecDirectories()
+			Expect(registry.Configure(cdiLib.WithSpecDirs(fs.RootDir+"/cdi_static", fs.RootDir+"/cdi_dynamic"),
+				cdiLib.WithAutoRefresh(false))).To(Succeed())
+			defer func() {
+				Expect(registry.Configure(cdiLib.WithSpecDirs(previousDirs...), cdiLib.WithAutoRefresh(true))).To(Succeed())
+			}()
 
 			device := mocks.NewMockPciNetDevice(GinkgoT())
 			device.On("GetPciAddr").Return("0000:00:00.1")
