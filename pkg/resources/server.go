@@ -449,7 +449,7 @@ func (rs *resourceServer) canRecoverSocketLocked() bool {
 	if err != nil || rs.socketFileInfo == nil || !os.SameFile(info, rs.socketFileInfo) {
 		return false
 	}
-	inos, err := unixSocketInodesForPathFiltered(rs.socketPath, true)
+	inos, err := unixListenerInodesForPath(rs.socketPath)
 	if err != nil {
 		return false
 	}
@@ -739,8 +739,8 @@ const (
 	procNetUnixListenFlag = 0x10000
 )
 
-// unixSocketInodesForPath returns sockfs inodes of the listening sockets bound
-// to path in /proc/net/unix.
+// unixListenerInodesForPath returns sockfs inodes of the listening sockets
+// bound to path in /proc/net/unix.
 //
 // Sockets accepted from a listener are listed under the listener's path with
 // their own inode, so each open client connection (kubelet keeps one for the
@@ -755,11 +755,7 @@ const (
 // replacement's socket.
 // On Linux, Fstat on a Unix listen fd yields a sockfs inode that matches this
 // table, not the filesystem inode from Lstat on the pathname.
-func unixSocketInodesForPath(socketPath string) ([]uint64, error) {
-	return unixSocketInodesForPathFiltered(socketPath, false)
-}
-
-func unixSocketInodesForPathFiltered(socketPath string, listenersOnly bool) ([]uint64, error) {
+func unixListenerInodesForPath(socketPath string) ([]uint64, error) {
 	f, err := os.Open("/proc/net/unix")
 	if err != nil {
 		return nil, err
@@ -774,10 +770,6 @@ func unixSocketInodesForPathFiltered(socketPath string, listenersOnly bool) ([]u
 	for sc.Scan() {
 		fields := strings.Fields(sc.Text())
 		if len(fields) <= procNetUnixPathField {
-			continue
-		}
-		// SO_ACCEPTCON marks a listening Unix socket.
-		if listenersOnly && fields[3] != "00010000" {
 			continue
 		}
 		p := fields[procNetUnixPathField]
@@ -801,7 +793,7 @@ func unixSocketInodesForPathFiltered(socketPath string, listenersOnly bool) ([]u
 }
 
 func socketPathOwnedSolelyBy(socketPath string, ino uint64) bool {
-	inos, err := unixSocketInodesForPath(socketPath)
+	inos, err := unixListenerInodesForPath(socketPath)
 	if err != nil {
 		log.Printf("warning: cannot verify socket ownership for %s: %v", socketPath, err)
 		return false
