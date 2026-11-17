@@ -41,7 +41,7 @@ func TestUpdateDevicesWithoutListAndWatch(t *testing.T) {
 		devices := []types.PciNetDevice{device}
 		server, err := newResourceServer(&types.UserConfig{
 			ResourceName: "test", ResourcePrefix: "rdma", RdmaHcaMax: 2,
-		}, nil, t.TempDir(), true, false)
+		}, nil, t.TempDir(), true, false, "")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -120,7 +120,7 @@ func TestDeviceUpdatesBeforeWatch(t *testing.T) {
 	devices := []types.PciNetDevice{device}
 	server, err := newResourceServer(&types.UserConfig{
 		ResourceName: "test", ResourcePrefix: "rdma", RdmaHcaMax: 2,
-	}, nil, t.TempDir(), true, false)
+	}, nil, t.TempDir(), true, false, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -102,7 +102,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -118,7 +118,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -138,7 +138,7 @@ var _ = Describe("resourceServer tests", func() {
 			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
 			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
 			deviceList := []types.PciNetDevice{fakePciDevice}
-			obj, err := newResourceServer(conf, deviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, deviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -154,7 +154,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -170,7 +170,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
@@ -181,7 +181,7 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("server with plugin with invalid max number of resources", func() {
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: -100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).To(HaveOccurred())
 			Expect(obj).To(BeNil())
 		})
@@ -414,7 +414,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{RdmaHcaMax: 100, ResourcePrefix: "rdma", ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).ToNot(HaveOccurred())
 
 			rs := obj.(*resourceServer)
@@ -445,7 +445,7 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{RdmaHcaMax: 1, ResourcePrefix: "rdma", ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, true)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, true, "")
 			Expect(err).ToNot(HaveOccurred())
 
 			cdi := &cdiMocks.CDI{}
@@ -590,7 +590,7 @@ var _ = Describe("resourceServer tests", func() {
 			}()
 
 			conf := &types.UserConfig{ResourceName: "fake_test", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, shouldEnablePluginWatch, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, shouldEnablePluginWatch, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 			if !shouldEnablePluginWatch {
@@ -664,7 +664,7 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = path.Join(fs.RootDir, deprecatedPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false)
+				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 				rs.deprecatedSockDir = deprecatedSockDir
@@ -695,7 +695,7 @@ var _ = Describe("resourceServer tests", func() {
 				activeSockDir = path.Join(fs.RootDir, kubeletPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, true, false)
+				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, true, false, "")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 
@@ -725,7 +725,7 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = path.Join(fs.RootDir, deprecatedPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false)
+				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "")
 				Expect(err).ToNot(HaveOccurred())
 				rs := obj.(*resourceServer)
 				rs.deprecatedSockDir = deprecatedSockDir
@@ -1095,7 +1095,7 @@ var _ = Describe("resourceServer tests", func() {
 	DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
 			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false)
+			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
 			Expect(err).ToNot(HaveOccurred())
 			rs := obj.(*resourceServer)
 

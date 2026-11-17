@@ -177,6 +177,14 @@ changes. Notes:
 
 Note: Either `selectors` or `devices` must be specified for a given resource, "selectors" is recommended.
 
+Different resource prefixes may use the same resource name, for example `a.example/hca` and
+`b.example/hca`. Omitting `resourcePrefix` is equivalent to setting it to `rdma` for uniqueness checks.
+The advertised resource names and virtual device IDs are unchanged. CDI spec filenames and annotation
+keys use a stable identifier derived from the full resource name; existing PCI-based CDI device
+references remain valid. Unique resource names keep their existing socket endpoints when they fit the
+Unix socket path limit. When names repeat across prefixes, endpoints use bounded identifiers instead.
+
+
 ## Devices Selectors
 
 The following selectors are used for filtering the desired devices.

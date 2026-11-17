@@ -36,6 +36,8 @@ package resources
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/base32"
 	"fmt"
 	"log"
 	"net"
@@ -166,9 +168,60 @@ func (rsc *resourcesServerPort) GetClientConn(unixSocketPath string) (*grpc.Clie
 	return c, nil
 }
 
+// resourcePoolID is independent of the other configured pools. The hyphen keeps
+// this namespace separate from legacy pool names, which only allow [a-zA-Z0-9_].
+func resourcePoolID(resourceName string) string {
+	digest := sha256.Sum256([]byte(resourceName))
+	return "pool-" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest[:])
+}
+
+// resourceSocketNames preserves existing endpoints where possible. Socket names
+// may change when a same-name pool is added; persistent CDI identity does not.
+func resourceSocketNames(configs []*types.UserConfig, socketDir string) (map[string]string, error) {
+	// Linux sockaddr_un includes a terminating NUL in its 108-byte path field.
+	const maxSocketPath = 107
+	nameCounts := make(map[string]int)
+	for _, config := range configs {
+		nameCounts[config.ResourceName]++
+	}
+	names := make(map[string]string)
+	used := make(map[string]string)
+	for _, config := range configs {
+		resourceName := config.ResourcePrefix + "/" + config.ResourceName
+		name := config.ResourceName + "." + socketSuffix
+		if nameCounts[config.ResourceName] == 1 && len(filepath.Join(socketDir, name)) <= maxSocketPath {
+			names[resourceName] = name
+			used[name] = resourceName
+		}
+	}
+	for _, config := range configs {
+		resourceName := config.ResourcePrefix + "/" + config.ResourceName
+		if _, exists := names[resourceName]; exists {
+			continue
+		}
+		poolID := resourcePoolID(resourceName)
+		// Shorten only the temporary endpoint, never the persistent pool ID.
+		budget := maxSocketPath - len(filepath.Join(socketDir, "."+socketSuffix))
+		if budget <= len("pool-") {
+			return nil, fmt.Errorf("socket directory %q is too long for resource %q", socketDir, resourceName)
+		}
+		if budget < len(poolID) {
+			poolID = poolID[:budget]
+		}
+		name := poolID + "." + socketSuffix
+		if other, exists := used[name]; exists {
+			return nil, fmt.Errorf("socket name collision between %q and %q in %q", other, resourceName, socketDir)
+		}
+		names[resourceName] = name
+		used[name] = resourceName
+	}
+	return names, nil
+}
+
 // newResourceServer returns an initialized server
 func newResourceServer(
 	config *types.UserConfig, devices []types.PciNetDevice, kubeletRootDir string, watcherMode, useCdi bool,
+	socketName string,
 ) (types.ResourceServer, error) {
 	var devs []*pluginapi.Device
 
@@ -205,7 +258,9 @@ func newResourceServer(
 		log.Printf("Warning: no Rdma Devices were found for resource %s\n", config.ResourceName)
 	}
 
-	socketName := fmt.Sprintf("%s.%s", config.ResourceName, socketSuffix)
+	if socketName == "" {
+		socketName = config.ResourceName + "." + socketSuffix
+	}
 
 	return &resourceServer{
 		activeSockDir:     activeSockDir,
@@ -224,7 +279,7 @@ func newResourceServer(
 		pciDevices:        devices,
 		useCdi:            useCdi,
 		cdi:               cdi.New(),
-		cdiResourceName:   config.ResourceName,
+		cdiResourceName:   resourcePoolID(config.ResourcePrefix + "/" + config.ResourceName),
 	}, nil
 }
 

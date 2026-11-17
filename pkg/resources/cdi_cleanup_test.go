@@ -95,6 +95,8 @@ func createCDICleanupFixtures(t *testing.T, dirs []string) ([]string, map[string
 			kind string
 		}{
 			{"nvidia.com_test-pool.yaml", "nvidia.com/net-rdma"},
+			{"nvidia.com_pool-ABCDEFG.yaml", "nvidia.com/net-rdma"},
+			{"nvidia.com_removed-pool.yaml", "nvidia.com/net-rdma"},
 			{"nvidia.com-gpu.json", "nvidia.com/gpu"},
 			{"nvidia.com.example_net.yaml", "nvidia.com.example/net-rdma"},
 			{"nvidia.com-invalid.yaml", ""},

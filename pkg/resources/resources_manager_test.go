@@ -260,7 +260,7 @@ var _ = Describe("ResourcesManger", func() {
 			rm.configList = configlist
 			err := rm.ValidateConfigs()
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(Equal("error: resource name \"test_config\" already exists"))
+			Expect(err.Error()).To(Equal("error: resource name \"/test_config\" already exists"))
 		})
 		It("resources with invalid number of resources", func() {
 			var configlist []*types.UserConfig

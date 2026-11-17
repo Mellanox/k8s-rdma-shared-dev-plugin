@@ -149,7 +149,7 @@ func (rm *resourceManager) ReadConfig() error {
 
 // ValidateConfigs validate the configurations
 func (rm *resourceManager) ValidateConfigs() error {
-	resourceName := make(map[string]string)
+	resourceNames := make(map[string]struct{})
 
 	if rm.PeriodicUpdateInterval < 0 {
 		return fmt.Errorf("invalid \"periodicUpdateInterval\" configuration \"%d\"", rm.PeriodicUpdateInterval)
@@ -164,15 +164,14 @@ func (rm *resourceManager) ValidateConfigs() error {
 		if !validResourceName(conf.ResourceName) {
 			return fmt.Errorf("error: resource name \"%s\" contains invalid characters", conf.ResourceName)
 		}
-		// check resource names are unique
-		_, ok := resourceName[conf.ResourceName]
-		if ok {
-			// resource name already exist
-			return fmt.Errorf("error: resource name \"%s\" already exists", conf.ResourceName)
-		}
-		// If prefix is not configured - use the default one
+		// If prefix is not configured - use the default one.
 		if conf.ResourcePrefix == "" {
 			conf.ResourcePrefix = rm.defaultResourcePrefix
+		}
+		// Names only need to be unique within their effective prefix.
+		resourceName := conf.ResourcePrefix + "/" + conf.ResourceName
+		if _, exists := resourceNames[resourceName]; exists {
+			return fmt.Errorf("error: resource name \"%s\" already exists", resourceName)
 		}
 
 		if conf.RdmaHcaMax < 0 {
@@ -193,7 +192,7 @@ func (rm *resourceManager) ValidateConfigs() error {
 			conf.Selectors.IfNames = conf.Devices
 		}
 
-		resourceName[conf.ResourceName] = conf.ResourceName
+		resourceNames[resourceName] = struct{}{}
 	}
 
 	return nil
@@ -220,6 +219,14 @@ func (rm *resourceManager) ValidateRdmaSystemMode() error {
 // InitServers init server
 func (rm *resourceManager) InitServers() error {
 	cdiLegacyClaimed := make(map[string]bool)
+	sockDir := getDeprecatedSockDir()
+	if rm.watchMode {
+		sockDir = getActiveSockDir(rm.kubeletRootDir)
+	}
+	socketNames, err := resourceSocketNames(rm.configList, sockDir)
+	if err != nil {
+		return err
+	}
 	for _, config := range rm.configList {
 		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
@@ -249,7 +256,8 @@ func (rm *resourceManager) InitServers() error {
 				return err
 			}
 		}
-		rs, err := newResourceServer(config, filteredDevices, rm.kubeletRootDir, rm.watchMode, rm.useCdi)
+		rs, err := newResourceServer(config, filteredDevices, rm.kubeletRootDir, rm.watchMode, rm.useCdi,
+			socketNames[config.ResourcePrefix+"/"+config.ResourceName])
 		if err != nil {
 			return err
 		}
