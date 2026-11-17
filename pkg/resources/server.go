@@ -113,6 +113,8 @@ type resourceServer struct {
 	useCdi          bool
 	cdi             cdi.CDI
 	cdiResourceName string
+	// cdiLegacyDevices are the devices whose legacy CDI name this pool defines
+	cdiLegacyDevices []types.PciNetDevice
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -587,7 +589,8 @@ func (rs *resourceServer) updateCDISpec() error {
 	if !rs.useCdi {
 		return nil
 	}
-	err := rs.cdi.CreateCDISpec(cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName, rs.pciDevices)
+	err := rs.cdi.CreateCDISpec(
+		cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName, rs.pciDevices, rs.cdiLegacyDevices)
 	if err != nil {
 		log.Printf("updateCDISpec(): error creating CDI spec: %v", err)
 		return err

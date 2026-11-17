@@ -9,6 +9,7 @@ require (
 	github.com/jaypipes/pcidb v1.1.1
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.44.0
+	github.com/opencontainers/runtime-spec v1.2.1
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.12.1
 	github.com/vishvananda/netlink v1.3.1
@@ -23,7 +24,6 @@ require (
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/opencontainers/cgroups v0.0.4 // indirect
 	github.com/opencontainers/runc v1.3.6 // indirect
-	github.com/opencontainers/runtime-spec v1.2.1 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20221107090550-2e043c6bd626 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect

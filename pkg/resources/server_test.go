@@ -449,7 +449,7 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			cdi := &cdiMocks.CDI{}
-			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			rs := obj.(*resourceServer)
 			rs.cdi = cdi
 
@@ -460,7 +460,8 @@ var _ = Describe("resourceServer tests", func() {
 			cancel()
 
 			err = rs.ListAndWatch(nil, s)
-			cdi.AssertCalled(GinkgoT(), "CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			cdi.AssertCalled(GinkgoT(), "CreateCDISpec",
+				mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("Stop ListAndWatch when stream is closed", func() {

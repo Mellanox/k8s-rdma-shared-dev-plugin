@@ -219,6 +219,7 @@ func (rm *resourceManager) ValidateRdmaSystemMode() error {
 
 // InitServers init server
 func (rm *resourceManager) InitServers() error {
+	cdiLegacyClaimed := make(map[string]bool)
 	for _, config := range rm.configList {
 		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
@@ -251,6 +252,9 @@ func (rm *resourceManager) InitServers() error {
 		rs, err := newResourceServer(config, filteredDevices, rm.kubeletRootDir, rm.watchMode, rm.useCdi)
 		if err != nil {
 			return err
+		}
+		if rm.useCdi {
+			rs.(*resourceServer).cdiLegacyDevices = cdi.ClaimLegacyDevices(cdiLegacyClaimed, filteredDevices)
 		}
 		rm.resourceServers = append(rm.resourceServers, rs)
 	}

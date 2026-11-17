@@ -12,13 +12,13 @@ type CDI struct {
 	mock.Mock
 }
 
-// CreateCDISpec provides a mock function with given fields: resourcePrefix, resourceName, poolName, devices
-func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolName string, devices []types.PciNetDevice) error {
-	ret := _m.Called(resourcePrefix, resourceName, poolName, devices)
+// CreateCDISpec provides a mock function with given fields: resourcePrefix, resourceName, poolName, devices, legacyDevices
+func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolName string, devices []types.PciNetDevice, legacyDevices []types.PciNetDevice) error {
+	ret := _m.Called(resourcePrefix, resourceName, poolName, devices, legacyDevices)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, string, []types.PciNetDevice) error); ok {
-		r0 = rf(resourcePrefix, resourceName, poolName, devices)
+	if rf, ok := ret.Get(0).(func(string, string, string, []types.PciNetDevice, []types.PciNetDevice) error); ok {
+		r0 = rf(resourcePrefix, resourceName, poolName, devices, legacyDevices)
 	} else {
 		r0 = ret.Error(0)
 	}
