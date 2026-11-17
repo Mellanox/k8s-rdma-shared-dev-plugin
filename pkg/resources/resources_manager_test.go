@@ -606,8 +606,8 @@ var _ = Describe("ResourcesManger", func() {
 
 			stopPeriodicUpdate := rm.PeriodicUpdate()
 			time.Sleep(2 * time.Second)
-			Expect(len(rm.deviceList)).To(Equal(1))
 			stopPeriodicUpdate()
+			Expect(len(rm.deviceList)).To(Equal(1))
 			fakeResourceServer.AssertExpectations(testCallsAssertionReporter)
 		})
 		It("No update when periodic interval is 0", func() {

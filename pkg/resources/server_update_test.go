@@ -76,7 +76,7 @@ func TestUpdateDevicesWithoutListAndWatch(t *testing.T) {
 			t.Fatalf("new ListAndWatch stream received %d devices, want 2", len(stream.devices))
 		}
 		allocation, err := rs.Allocate(context.Background(), &pluginapi.AllocateRequest{
-			ContainerRequests: []*pluginapi.ContainerAllocateRequest{{DevicesIDs: []string{"0"}}},
+			ContainerRequests: []*pluginapi.ContainerAllocateRequest{{DevicesIds: []string{"0"}}},
 		})
 		if err != nil {
 			t.Fatal(err)
