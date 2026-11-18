@@ -106,17 +106,17 @@ type resourceServer struct {
 	// mutex protects devs and deviceSpec
 	mutex sync.RWMutex
 	// lifecycleMu serializes Start/Stop/Restart and socket ownership cleanup
-	lifecycleMu     sync.Mutex
-	stopping        bool
-	generation      uint64
-	devs            []*pluginapi.Device
-	deviceSpec      []*pluginapi.DeviceSpec
-	pciDevices      []types.PciNetDevice
-	useCdi          bool
-	cdi             cdi.CDI
-	cdiResourceName string
-	// cdiLegacyDevices are the devices whose legacy CDI name this pool defines
-	cdiLegacyDevices []types.PciNetDevice
+	lifecycleMu      sync.Mutex
+	stopping         bool
+	generation       uint64
+	devs             []*pluginapi.Device
+	deviceSpec       []*pluginapi.DeviceSpec
+	pciDevices       []types.PciNetDevice
+	useCdi           bool
+	cdi              cdi.CDI
+	cdiResourceName  string
+	cdiSpecName      string
+	cdiDeviceAliases []cdi.DeviceAlias
 }
 
 func (rsc *resourcesServerPort) GetServer() *grpc.Server {
@@ -175,15 +175,19 @@ func resourcePoolID(resourceName string) string {
 	return "pool-" + base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(digest[:])
 }
 
-// resourceSocketNames preserves existing endpoints where possible. Socket names
-// may change when a same-name pool is added; persistent CDI identity does not.
-func resourceSocketNames(configs []*types.UserConfig, socketDir string) (map[string]string, error) {
-	// Linux sockaddr_un includes a terminating NUL in its 108-byte path field.
-	const maxSocketPath = 107
+func resourceNameCounts(configs []*types.UserConfig) map[string]int {
 	nameCounts := make(map[string]int)
 	for _, config := range configs {
 		nameCounts[config.ResourceName]++
 	}
+	return nameCounts
+}
+
+// resourceSocketNames preserves existing endpoints where possible.
+func resourceSocketNames(configs []*types.UserConfig, socketDir string) (map[string]string, error) {
+	// Linux sockaddr_un includes a terminating NUL in its 108-byte path field.
+	const maxSocketPath = 107
+	nameCounts := resourceNameCounts(configs)
 	names := make(map[string]string)
 	used := make(map[string]string)
 	for _, config := range configs {
@@ -221,8 +225,8 @@ func resourceSocketNames(configs []*types.UserConfig, socketDir string) (map[str
 // newResourceServer returns an initialized server
 func newResourceServer(
 	config *types.UserConfig, devices []types.PciNetDevice, kubeletRootDir string, watcherMode, useCdi bool,
-	socketName string,
-) (types.ResourceServer, error) {
+	socketName, cdiSpecName string,
+) (*resourceServer, error) {
 	var devs []*pluginapi.Device
 
 	activeSockDir := getActiveSockDir(kubeletRootDir)
@@ -261,6 +265,9 @@ func newResourceServer(
 	if socketName == "" {
 		socketName = config.ResourceName + "." + socketSuffix
 	}
+	if cdiSpecName == "" {
+		cdiSpecName = config.ResourceName
+	}
 
 	return &resourceServer{
 		activeSockDir:     activeSockDir,
@@ -280,6 +287,7 @@ func newResourceServer(
 		useCdi:            useCdi,
 		cdi:               cdi.New(),
 		cdiResourceName:   resourcePoolID(config.ResourcePrefix + "/" + config.ResourceName),
+		cdiSpecName:       cdiSpecName,
 	}, nil
 }
 
@@ -645,7 +653,7 @@ func (rs *resourceServer) updateCDISpec() error {
 		return nil
 	}
 	err := rs.cdi.CreateCDISpec(
-		cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName, rs.pciDevices, rs.cdiLegacyDevices)
+		cdiResourcePrefix, cdiResourceKind, rs.cdiSpecName, rs.pciDevices, rs.cdiDeviceAliases)
 	if err != nil {
 		log.Printf("updateCDISpec(): error creating CDI spec: %v", err)
 		return err
@@ -683,7 +691,7 @@ func (rs *resourceServer) Allocate(_ context.Context, r *pluginapi.AllocateReque
 		if rs.useCdi {
 			var err error
 			ress[i].Annotations, err = rs.cdi.CreateContainerAnnotations(
-				rs.pciDevices, cdiResourcePrefix, cdiResourceKind, rs.cdiResourceName)
+				rs.pciDevices, cdiResourcePrefix, cdiResourceKind, rs.cdiSpecName, rs.cdiResourceName)
 			if err != nil {
 				return nil, fmt.Errorf("cant create container annotation: %s", err)
 			}

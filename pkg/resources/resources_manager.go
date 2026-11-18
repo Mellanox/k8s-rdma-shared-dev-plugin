@@ -218,7 +218,6 @@ func (rm *resourceManager) ValidateRdmaSystemMode() error {
 
 // InitServers init server
 func (rm *resourceManager) InitServers() error {
-	cdiLegacyClaimed := make(map[string]bool)
 	sockDir := getDeprecatedSockDir()
 	if rm.watchMode {
 		sockDir = getActiveSockDir(rm.kubeletRootDir)
@@ -227,6 +226,8 @@ func (rm *resourceManager) InitServers() error {
 	if err != nil {
 		return err
 	}
+	nameCounts := resourceNameCounts(rm.configList)
+	cdiClaimedAliases := make(map[string]bool)
 	for _, config := range rm.configList {
 		log.Printf("Resource: %+v\n", config)
 		devices := rm.GetDevices()
@@ -256,13 +257,30 @@ func (rm *resourceManager) InitServers() error {
 				return err
 			}
 		}
+		resourceName := config.ResourcePrefix + "/" + config.ResourceName
+		// Keep the spec filename and primary device names for unique pools
+		// so a late write by the outgoing plugin still serves new allocations.
+		cdiSpecName := config.ResourceName
+		if nameCounts[config.ResourceName] > 1 {
+			cdiSpecName = resourcePoolID(resourceName)
+		}
 		rs, err := newResourceServer(config, filteredDevices, rm.kubeletRootDir, rm.watchMode, rm.useCdi,
-			socketNames[config.ResourcePrefix+"/"+config.ResourceName])
+			socketNames[resourceName], cdiSpecName)
 		if err != nil {
 			return err
 		}
 		if rm.useCdi {
-			rs.(*resourceServer).cdiLegacyDevices = cdi.ClaimLegacyDevices(cdiLegacyClaimed, filteredDevices)
+			// Retain saved device references when a pool name changes between
+			// shared and unique. Claim the unqualified pool name only once
+			// for each PCI address, even if both pools select that device.
+			aliasPoolName := rs.cdiResourceName
+			if cdiSpecName != config.ResourceName {
+				aliasPoolName = config.ResourceName
+			}
+			rs.cdiDeviceAliases = append(
+				cdi.ClaimDeviceAliases(cdiClaimedAliases, "", filteredDevices),
+				cdi.ClaimDeviceAliases(cdiClaimedAliases, aliasPoolName, filteredDevices)...,
+			)
 		}
 		rm.resourceServers = append(rm.resourceServers, rs)
 	}

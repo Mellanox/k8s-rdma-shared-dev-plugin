@@ -102,9 +102,8 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
 			Expect(rs.socketName).To(Equal("test_server.sock"))
 			Expect(rs.socketPath).To(Equal(path.Join(activeSockDir, "test_server.sock")))
@@ -118,9 +117,8 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
 			Expect(rs.socketName).To(Equal("test_server.sock"))
 			Expect(rs.socketPath).To(Equal(path.Join(activeSockDir, "test_server.sock")))
@@ -138,9 +136,8 @@ var _ = Describe("resourceServer tests", func() {
 			fakePciDevice.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{})
 			fakePciDevice.On("GetPciAddr").Return("0000:02:00.0")
 			deviceList := []types.PciNetDevice{fakePciDevice}
-			obj, err := newResourceServer(conf, deviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, deviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
 			Expect(rs.socketName).To(Equal("test_server.sock"))
 			Expect(rs.socketPath).To(Equal(path.Join(activeSockDir, "test_server.sock")))
@@ -154,9 +151,8 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
 			Expect(rs.socketName).To(Equal("test_server.sock"))
 			Expect(rs.socketPath).To(Equal(path.Join(deprecatedSockDir, "test_server.sock")))
@@ -170,9 +166,8 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: 0}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", false, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			Expect(rs.resourceName).To(Equal("rdma/test_server"))
 			Expect(rs.socketName).To(Equal("test_server.sock"))
 			Expect(rs.socketPath).To(Equal(path.Join(deprecatedSockDir, "test_server.sock")))
@@ -181,9 +176,9 @@ var _ = Describe("resourceServer tests", func() {
 		})
 		It("server with plugin with invalid max number of resources", func() {
 			conf := &types.UserConfig{ResourceName: "test_server", ResourcePrefix: "rdma", RdmaHcaMax: -100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).To(HaveOccurred())
-			Expect(obj).To(BeNil())
+			Expect(rs).To(BeNil())
 		})
 	})
 	Context("Start", func() {
@@ -414,10 +409,8 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{RdmaHcaMax: 100, ResourcePrefix: "rdma", ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-
-			rs := obj.(*resourceServer)
 
 			rs.health = make(chan *pluginapi.Device)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -445,12 +438,11 @@ var _ = Describe("resourceServer tests", func() {
 			}
 			defer fs.Use()()
 			conf := &types.UserConfig{RdmaHcaMax: 1, ResourcePrefix: "rdma", ResourceName: "fake"}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, true, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, true, "", "")
 			Expect(err).ToNot(HaveOccurred())
 
 			cdi := &cdiMocks.CDI{}
 			cdi.On("CreateCDISpec", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-			rs := obj.(*resourceServer)
 			rs.cdi = cdi
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -487,16 +479,21 @@ var _ = Describe("resourceServer tests", func() {
 			Expect(len(res.ContainerResponses)).To(Equal(2))
 		})
 		It("Allocate calls CDI when configured", func() {
-			rs := resourceServer{resourceName: "fake", socketName: "fake.sock", useCdi: true, cdiResourceName: "pool"}
+			rs := resourceServer{
+				resourceName: "fake", socketName: "fake.sock", useCdi: true,
+				cdiSpecName: "pool", cdiResourceName: "annotation-pool",
+			}
 			req := &pluginapi.AllocateRequest{
 				ContainerRequests: []*pluginapi.ContainerAllocateRequest{nil, nil},
 			}
 			cdi := &cdiMocks.CDI{}
-			cdi.On("CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything, "pool").Return(nil, nil)
+			cdi.On("CreateContainerAnnotations",
+				mock.Anything, mock.Anything, mock.Anything, "pool", "annotation-pool").Return(nil, nil)
 			rs.cdi = cdi
 			_, err := rs.Allocate(context.TODO(), req)
 			Expect(err).ToNot(HaveOccurred())
-			cdi.AssertCalled(GinkgoT(), "CreateContainerAnnotations", mock.Anything, mock.Anything, mock.Anything, "pool")
+			cdi.AssertCalled(GinkgoT(), "CreateContainerAnnotations",
+				mock.Anything, mock.Anything, mock.Anything, "pool", "annotation-pool")
 		})
 	})
 	Context("GetInfo", func() {
@@ -590,9 +587,8 @@ var _ = Describe("resourceServer tests", func() {
 			}()
 
 			conf := &types.UserConfig{ResourceName: "fake_test", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, shouldEnablePluginWatch, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, shouldEnablePluginWatch, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 			if !shouldEnablePluginWatch {
 				rs.deprecatedSockDir = deprecatedSockDir
 				rs.socketPath = path.Join(deprecatedSockDir, rs.socketName)
@@ -664,9 +660,8 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = path.Join(fs.RootDir, deprecatedPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "")
+				rs, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "", "")
 				Expect(err).ToNot(HaveOccurred())
-				rs := obj.(*resourceServer)
 				rs.deprecatedSockDir = deprecatedSockDir
 				rs.socketPath = path.Join(deprecatedSockDir, rs.socketName)
 
@@ -695,9 +690,8 @@ var _ = Describe("resourceServer tests", func() {
 				activeSockDir = path.Join(fs.RootDir, kubeletPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, true, false, "")
+				rs, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, true, false, "", "")
 				Expect(err).ToNot(HaveOccurred())
-				rs := obj.(*resourceServer)
 
 				registrationServer := createFakeRegistrationServer(activeSockDir,
 					"fakename.sock", false, true)
@@ -725,9 +719,8 @@ var _ = Describe("resourceServer tests", func() {
 				deprecatedSockDir = path.Join(fs.RootDir, deprecatedPluginRegistry)
 
 				conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-				obj, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "")
+				rs, err := newResourceServer(conf, fakeDeviceList, fs.RootDir, false, false, "", "")
 				Expect(err).ToNot(HaveOccurred())
-				rs := obj.(*resourceServer)
 				rs.deprecatedSockDir = deprecatedSockDir
 				rs.socketPath = path.Join(deprecatedSockDir, rs.socketName)
 
@@ -1095,9 +1088,8 @@ var _ = Describe("resourceServer tests", func() {
 	DescribeTable("allocating",
 		func(req *pluginapi.AllocateRequest, expectedRespLength int, shouldFail bool) {
 			conf := &types.UserConfig{ResourceName: "fakename", ResourcePrefix: "rdma", RdmaHcaMax: 100}
-			obj, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "")
+			rs, err := newResourceServer(conf, fakeDeviceList, "/var/lib/kubelet", true, false, "", "")
 			Expect(err).ToNot(HaveOccurred())
-			rs := obj.(*resourceServer)
 
 			resp, err := rs.Allocate(context.TODO(), req)
 

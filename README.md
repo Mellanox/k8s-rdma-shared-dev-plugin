@@ -179,10 +179,15 @@ Note: Either `selectors` or `devices` must be specified for a given resource, "s
 
 Different resource prefixes may use the same resource name, for example `a.example/hca` and
 `b.example/hca`. Omitting `resourcePrefix` is equivalent to setting it to `rdma` for uniqueness checks.
-The advertised resource names and virtual device IDs are unchanged. CDI spec filenames and annotation
-keys use a stable identifier derived from the full resource name; existing PCI-based CDI device
-references remain valid. Unique resource names keep their existing socket endpoints when they fit the
-Unix socket path limit. When names repeat across prefixes, endpoints use bounded identifiers instead.
+The advertised resource names and virtual device IDs are unchanged. CDI annotation keys identify
+pools by their full resource name. Unique resource names keep their existing CDI spec filenames and
+CDI device names. They also keep their existing socket endpoints when the paths fit the Unix socket
+limit. Pools with a shared resource name use separate CDI spec filenames, device names, and bounded
+socket identifiers. CDI specs keep aliases for saved allocations when their devices are still present.
+
+With CDI enabled, if a configuration change makes a resource name shared across prefixes or unique
+again, stop the outgoing plugin on each node before starting its replacement. The default DaemonSet
+rollout uses this order. It prevents both CDI filename layouts from being written at the same time.
 
 
 ## Devices Selectors

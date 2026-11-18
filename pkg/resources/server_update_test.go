@@ -39,13 +39,12 @@ func TestUpdateDevicesWithoutListAndWatch(t *testing.T) {
 		device := mocks.NewMockPciNetDevice(t)
 		device.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{{HostPath: "/dev/infiniband/uverbs0"}})
 		devices := []types.PciNetDevice{device}
-		server, err := newResourceServer(&types.UserConfig{
+		rs, err := newResourceServer(&types.UserConfig{
 			ResourceName: "test", ResourcePrefix: "rdma", RdmaHcaMax: 2,
-		}, nil, t.TempDir(), true, false, "")
+		}, nil, t.TempDir(), true, false, "", "")
 		if err != nil {
 			t.Fatal(err)
 		}
-		rs := server.(*resourceServer)
 		rs.UpdateDevices(devices)
 
 		done := make(chan struct{})
@@ -118,13 +117,12 @@ func TestDeviceUpdatesBeforeWatch(t *testing.T) {
 	device := mocks.NewMockPciNetDevice(t)
 	device.On("GetRdmaSpec").Return([]*pluginapi.DeviceSpec{{HostPath: "/dev/infiniband/uverbs0"}})
 	devices := []types.PciNetDevice{device}
-	server, err := newResourceServer(&types.UserConfig{
+	rs, err := newResourceServer(&types.UserConfig{
 		ResourceName: "test", ResourcePrefix: "rdma", RdmaHcaMax: 2,
-	}, nil, t.TempDir(), true, false, "")
+	}, nil, t.TempDir(), true, false, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	rs := server.(*resourceServer)
 	socketDir, err := os.MkdirTemp("", "rdma-")
 	if err != nil {
 		t.Fatal(err)
