@@ -50,7 +50,7 @@ import (
 
 // CDI represents CDI API required by Device plugin
 type CDI interface {
-	CreateCDISpec(resourcePrefix, resourceName, poolName string, devices []types.PciNetDevice) error
+	CreateCDISpec(resourcePrefix, resourceName, poolName string, devices, legacyDevices []types.PciNetDevice) error
 	CreateContainerAnnotations(
 		devices []types.PciNetDevice, resourcePrefix, resourceKind, poolName string) (map[string]string, error)
 }
@@ -59,9 +59,11 @@ type CDI interface {
 type impl struct {
 }
 
-// CreateCDISpec creates CDI spec file with specified devices
+// CreateCDISpec creates CDI spec file with specified devices.
+// legacyDevices are devices whose legacy PCI-only name the pool also defines,
+// see ClaimLegacyDevices.
 func (c *impl) CreateCDISpec(
-	resourcePrefix, resourceName, poolName string, devices []types.PciNetDevice) error {
+	resourcePrefix, resourceName, poolName string, devices, legacyDevices []types.PciNetDevice) error {
 	log.Printf("creating CDI spec for \"%s\" resource", resourceName)
 
 	cdiDevices := make([]cdiSpecs.Device, 0)
@@ -72,25 +74,10 @@ func (c *impl) CreateCDISpec(
 	}
 
 	for _, dev := range devices {
-		containerEdit := cdiSpecs.ContainerEdits{
-			DeviceNodes: make([]*cdiSpecs.DeviceNode, 0),
-		}
-
-		rdmaSpec := dev.GetRdmaSpec()
-		for _, spec := range rdmaSpec {
-			deviceNode := cdiSpecs.DeviceNode{
-				Path:        spec.ContainerPath,
-				HostPath:    spec.HostPath,
-				Permissions: "rw",
-			}
-			containerEdit.DeviceNodes = append(containerEdit.DeviceNodes, &deviceNode)
-		}
-
-		device := cdiSpecs.Device{
-			Name:           dev.GetPciAddr(),
-			ContainerEdits: containerEdit,
-		}
-		cdiSpec.Devices = append(cdiSpec.Devices, device)
+		cdiSpec.Devices = append(cdiSpec.Devices, cdiDevice(deviceName(poolName, dev.GetPciAddr()), dev))
+	}
+	for _, dev := range legacyDevices {
+		cdiSpec.Devices = append(cdiSpec.Devices, cdiDevice(dev.GetPciAddr(), dev))
 	}
 
 	err := cdi.GetRegistry().SpecDB().WriteSpec(&cdiSpec, resourcePrefix+"_"+poolName)
@@ -109,6 +96,58 @@ func (c *impl) CreateCDISpec(
 	}
 
 	return nil
+}
+
+func cdiDevice(name string, dev types.PciNetDevice) cdiSpecs.Device {
+	containerEdit := cdiSpecs.ContainerEdits{
+		DeviceNodes: make([]*cdiSpecs.DeviceNode, 0),
+	}
+
+	rdmaSpec := dev.GetRdmaSpec()
+	for _, spec := range rdmaSpec {
+		deviceNode := cdiSpecs.DeviceNode{
+			Path:        spec.ContainerPath,
+			HostPath:    spec.HostPath,
+			Permissions: "rw",
+		}
+		containerEdit.DeviceNodes = append(containerEdit.DeviceNodes, &deviceNode)
+	}
+
+	return cdiSpecs.Device{
+		Name:           name,
+		ContainerEdits: containerEdit,
+	}
+}
+
+// deviceName returns the CDI device name of a PCI device in a resource pool.
+// Every pool writes its own spec file of the same CDI kind, and a device may be
+// selected by more than one pool. CDI refuses to resolve a name that two spec
+// files define, so the name has to be unique per pool.
+func deviceName(poolName, pciAddr string) string {
+	return poolName + "_" + pciAddr
+}
+
+// ClaimLegacyDevices returns the devices whose legacy CDI device name, the PCI
+// address alone, the pool defines in its spec, and records them in claimed.
+//
+// Earlier versions named devices by PCI address only. Kubelet keeps the
+// annotations of existing allocations and reuses them when a container of an
+// existing Pod restarts, so these names have to stay resolvable after an
+// upgrade. Each legacy name is defined by exactly one pool, the first pool in
+// configuration order that selects the device, so that a device selected by
+// more than one pool does not get conflicting definitions. Call it for every
+// pool in configuration order with the same claimed map.
+func ClaimLegacyDevices(claimed map[string]bool, devices []types.PciNetDevice) []types.PciNetDevice {
+	var legacy []types.PciNetDevice
+	for _, dev := range devices {
+		pciAddr := dev.GetPciAddr()
+		if claimed[pciAddr] {
+			continue
+		}
+		claimed[pciAddr] = true
+		legacy = append(legacy, dev)
+	}
+	return legacy
 }
 
 // CreateContainerAnnotations creates container annotations based on CDI spec for a container runtime
@@ -132,7 +171,8 @@ func (c *impl) CreateContainerAnnotations(
 	}
 	deviceNames := make([]string, len(devices))
 	for i, dev := range devices {
-		deviceNames[i] = cdi.QualifiedName(resourceNamePrefix, resourceKind, dev.GetPciAddr())
+		deviceNames[i] = cdi.QualifiedName(
+			resourceNamePrefix, resourceKind, deviceName(poolName, dev.GetPciAddr()))
 	}
 	annoValue, err := cdi.AnnotationValue(deviceNames)
 	if err != nil {
