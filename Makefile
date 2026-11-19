@@ -47,7 +47,7 @@ GOLANGCI_LINT = $(BINDIR)/golangci-lint-$(GOLANGCILINT_VERSION)
 # golangci-lint version should be updated periodically
 # we keep it fixed to avoid it from unexpectedly failing on the project
 # in case of a version bump
-GOLANGCILINT_VERSION ?= v2.12.2
+GOLANGCILINT_VERSION ?= v2.15.0
 GOPROXY ?= $(shell go env GOPROXY)
 TIMEOUT = 20
 Q = $(if $(filter 1,$V),,@)
