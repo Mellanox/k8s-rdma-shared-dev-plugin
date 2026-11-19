@@ -398,7 +398,7 @@ func testReplacementOverlap(t *testing.T, watchMode bool) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = replacement.Stop() })
-	inos, err := unixSocketInodesForPathFiltered(old.socketPath, true)
+	inos, err := unixListenerInodesForPath(old.socketPath)
 	if err != nil || len(inos) != 2 {
 		t.Fatalf("expected overlapping listeners: %v, %v", inos, err)
 	}
