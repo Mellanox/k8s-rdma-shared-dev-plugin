@@ -3,6 +3,7 @@
 package mocks
 
 import (
+	cdi "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/cdi"
 	types "github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -12,13 +13,13 @@ type CDI struct {
 	mock.Mock
 }
 
-// CreateCDISpec provides a mock function with given fields: resourcePrefix, resourceName, poolName, devices, legacyDevices
-func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolName string, devices []types.PciNetDevice, legacyDevices []types.PciNetDevice) error {
-	ret := _m.Called(resourcePrefix, resourceName, poolName, devices, legacyDevices)
+// CreateCDISpec provides a mock function with given fields: resourcePrefix, resourceName, poolName, devices, aliases
+func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolName string, devices []types.PciNetDevice, aliases []cdi.DeviceAlias) error {
+	ret := _m.Called(resourcePrefix, resourceName, poolName, devices, aliases)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(string, string, string, []types.PciNetDevice, []types.PciNetDevice) error); ok {
-		r0 = rf(resourcePrefix, resourceName, poolName, devices, legacyDevices)
+	if rf, ok := ret.Get(0).(func(string, string, string, []types.PciNetDevice, []cdi.DeviceAlias) error); ok {
+		r0 = rf(resourcePrefix, resourceName, poolName, devices, aliases)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -26,25 +27,25 @@ func (_m *CDI) CreateCDISpec(resourcePrefix string, resourceName string, poolNam
 	return r0
 }
 
-// CreateContainerAnnotations provides a mock function with given fields: devices, resourcePrefix, resourceKind, poolName
-func (_m *CDI) CreateContainerAnnotations(devices []types.PciNetDevice, resourcePrefix string, resourceKind string, poolName string) (map[string]string, error) {
-	ret := _m.Called(devices, resourcePrefix, resourceKind, poolName)
+// CreateContainerAnnotations provides a mock function with given fields: devices, resourcePrefix, resourceKind, poolName, annotationPoolName
+func (_m *CDI) CreateContainerAnnotations(devices []types.PciNetDevice, resourcePrefix string, resourceKind string, poolName string, annotationPoolName string) (map[string]string, error) {
+	ret := _m.Called(devices, resourcePrefix, resourceKind, poolName, annotationPoolName)
 
 	var r0 map[string]string
 	var r1 error
-	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string) (map[string]string, error)); ok {
-		return rf(devices, resourcePrefix, resourceKind, poolName)
+	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string, string) (map[string]string, error)); ok {
+		return rf(devices, resourcePrefix, resourceKind, poolName, annotationPoolName)
 	}
-	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string) map[string]string); ok {
-		r0 = rf(devices, resourcePrefix, resourceKind, poolName)
+	if rf, ok := ret.Get(0).(func([]types.PciNetDevice, string, string, string, string) map[string]string); ok {
+		r0 = rf(devices, resourcePrefix, resourceKind, poolName, annotationPoolName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(map[string]string)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func([]types.PciNetDevice, string, string, string) error); ok {
-		r1 = rf(devices, resourcePrefix, resourceKind, poolName)
+	if rf, ok := ret.Get(1).(func([]types.PciNetDevice, string, string, string, string) error); ok {
+		r1 = rf(devices, resourcePrefix, resourceKind, poolName, annotationPoolName)
 	} else {
 		r1 = ret.Error(1)
 	}

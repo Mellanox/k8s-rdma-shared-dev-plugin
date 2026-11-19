@@ -118,7 +118,7 @@ kind: test-prefix/test-name`
 
 			claimed := make(map[string]bool)
 			for _, pool := range pools {
-				legacy := cdi.ClaimLegacyDevices(claimed, devices)
+				legacy := cdi.ClaimDeviceAliases(claimed, "", devices)
 				Expect(cdi.New().CreateCDISpec("nvidia.com", "net-rdma", pool, devices, legacy)).To(Succeed())
 			}
 			Expect(registry.Refresh()).To(Succeed())
@@ -127,7 +127,7 @@ kind: test-prefix/test-name`
 			// A container runtime resolves the devices named in the
 			// annotations returned by Allocate.
 			for _, pool := range pools {
-				annotations, err := cdi.New().CreateContainerAnnotations(devices, "nvidia.com", "net-rdma", pool)
+				annotations, err := cdi.New().CreateContainerAnnotations(devices, "nvidia.com", "net-rdma", pool, pool)
 				Expect(err).NotTo(HaveOccurred())
 				_, cdiDevices, err := cdiLib.ParseAnnotations(annotations)
 				Expect(err).NotTo(HaveOccurred())
@@ -214,7 +214,7 @@ kind: test-prefix/test-name`
 			}
 			claimed := make(map[string]bool)
 			for _, pool := range pools {
-				legacy := cdi.ClaimLegacyDevices(claimed, pool.devices)
+				legacy := cdi.ClaimDeviceAliases(claimed, "", pool.devices)
 				Expect(cdi.New().CreateCDISpec("nvidia.com", "net-rdma", pool.name, pool.devices, legacy)).To(Succeed())
 			}
 			Expect(registry.Refresh()).To(Succeed())
@@ -238,7 +238,8 @@ kind: test-prefix/test-name`
 
 			// New allocations use the pool-prefixed names.
 			for _, pool := range pools {
-				annotations, err := cdi.New().CreateContainerAnnotations(pool.devices, "nvidia.com", "net-rdma", pool.name)
+				annotations, err := cdi.New().CreateContainerAnnotations(
+					pool.devices, "nvidia.com", "net-rdma", pool.name, pool.name)
 				Expect(err).NotTo(HaveOccurred())
 				_, err = inject(annotations)
 				Expect(err).NotTo(HaveOccurred())
@@ -250,7 +251,8 @@ kind: test-prefix/test-name`
 			device := mocks.NewMockPciNetDevice(GinkgoT())
 			device.On("GetPciAddr").Return("0000:00:00.1")
 			cdi := cdi.New()
-			annotations, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device}, "example.com", "net", "pool")
+			annotations, err := cdi.CreateContainerAnnotations(
+				[]types.PciNetDevice{device}, "example.com", "net", "pool", "pool")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(annotations)).To(Equal(1))
 			annoVal := "example.com/net=pool_0000:00:00.1"
@@ -266,10 +268,10 @@ kind: test-prefix/test-name`
 			device2.On("GetPciAddr").Return("0000:00:00.2")
 			cdi := cdi.New()
 			annotations1, err := cdi.CreateContainerAnnotations(
-				[]types.PciNetDevice{device1}, "nvidia.com", "net-rdma", "rdma_pool_a")
+				[]types.PciNetDevice{device1}, "nvidia.com", "net-rdma", "rdma_pool_a", "rdma_pool_a")
 			Expect(err).NotTo(HaveOccurred())
 			annotations2, err := cdi.CreateContainerAnnotations(
-				[]types.PciNetDevice{device2}, "nvidia.com", "net-rdma", "rdma_pool_b")
+				[]types.PciNetDevice{device2}, "nvidia.com", "net-rdma", "rdma_pool_b", "rdma_pool_b")
 			Expect(err).NotTo(HaveOccurred())
 
 			merged := map[string]string{}
@@ -293,9 +295,9 @@ kind: test-prefix/test-name`
 			cdi := cdi.New()
 			prefix := strings.Repeat("a", 63) + ".example.com"
 			name := strings.Repeat("b", 63) + "_"
-			first, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device1}, prefix, "net-rdma", name)
+			first, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device1}, prefix, "net-rdma", name, name)
 			Expect(err).NotTo(HaveOccurred())
-			second, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device2}, prefix, "net-rdma", name)
+			second, err := cdi.CreateContainerAnnotations([]types.PciNetDevice{device2}, prefix, "net-rdma", name, name)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(first).To(HaveLen(1))
 			Expect(second).To(HaveLen(1))
@@ -306,7 +308,7 @@ kind: test-prefix/test-name`
 		})
 		It("should fail with empty pool name", func() {
 			device := mocks.NewMockPciNetDevice(GinkgoT())
-			_, err := cdi.New().CreateContainerAnnotations([]types.PciNetDevice{device}, "nvidia.com", "net-rdma", "")
+			_, err := cdi.New().CreateContainerAnnotations([]types.PciNetDevice{device}, "nvidia.com", "net-rdma", "", "")
 			Expect(err).To(HaveOccurred())
 		})
 	})

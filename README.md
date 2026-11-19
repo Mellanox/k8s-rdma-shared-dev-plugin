@@ -177,6 +177,22 @@ changes. Notes:
 
 Note: Either `selectors` or `devices` must be specified for a given resource, "selectors" is recommended.
 
+Different resource prefixes may use the same resource name, for example `a.example/hca` and
+`b.example/hca`. Omitting `resourcePrefix` is equivalent to setting it to `rdma` for uniqueness checks.
+The advertised resource names and virtual device IDs are unchanged. CDI annotation keys identify
+pools by their full resource name. Unique resource names keep their existing CDI spec filenames and
+CDI device names. They also keep their existing socket endpoints when the paths fit the Unix socket
+limit. Pools with a shared resource name use separate CDI spec filenames, device names, and bounded
+socket identifiers. CDI specs keep aliases for saved allocations when their devices are still present.
+
+With CDI enabled, stop the outgoing plugin on each node before starting its replacement if a
+configuration change can move a CDI device name to another spec file. This includes switching
+between unique and shared resource names, reordering pools that select the same device, and adding,
+removing, or changing selectors for pools in a way that reassigns a compatibility alias. Overlapping
+writers can define the same name in two specs, making saved allocations unresolvable. The default
+DaemonSet rollout uses stop-before-start.
+
+
 ## Devices Selectors
 
 The following selectors are used for filtering the desired devices.

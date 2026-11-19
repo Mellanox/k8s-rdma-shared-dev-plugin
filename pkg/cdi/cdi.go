@@ -48,22 +48,27 @@ import (
 	"github.com/Mellanox/k8s-rdma-shared-dev-plugin/pkg/types"
 )
 
+// DeviceAlias publishes an existing allocation name for a device.
+type DeviceAlias struct {
+	Name   string
+	Device types.PciNetDevice
+}
+
 // CDI represents CDI API required by Device plugin
 type CDI interface {
-	CreateCDISpec(resourcePrefix, resourceName, poolName string, devices, legacyDevices []types.PciNetDevice) error
+	CreateCDISpec(resourcePrefix, resourceName, poolName string, devices []types.PciNetDevice, aliases []DeviceAlias) error
 	CreateContainerAnnotations(
-		devices []types.PciNetDevice, resourcePrefix, resourceKind, poolName string) (map[string]string, error)
+		devices []types.PciNetDevice, resourcePrefix, resourceKind, poolName, annotationPoolName string,
+	) (map[string]string, error)
 }
 
 // impl implements CDI interface
 type impl struct {
 }
 
-// CreateCDISpec creates CDI spec file with specified devices.
-// legacyDevices are devices whose legacy PCI-only name the pool also defines,
-// see ClaimLegacyDevices.
+// CreateCDISpec publishes the pool's devices and their compatibility aliases.
 func (c *impl) CreateCDISpec(
-	resourcePrefix, resourceName, poolName string, devices, legacyDevices []types.PciNetDevice) error {
+	resourcePrefix, resourceName, poolName string, devices []types.PciNetDevice, aliases []DeviceAlias) error {
 	log.Printf("creating CDI spec for \"%s\" resource", resourceName)
 
 	cdiDevices := make([]cdiSpecs.Device, 0)
@@ -76,8 +81,8 @@ func (c *impl) CreateCDISpec(
 	for _, dev := range devices {
 		cdiSpec.Devices = append(cdiSpec.Devices, cdiDevice(deviceName(poolName, dev.GetPciAddr()), dev))
 	}
-	for _, dev := range legacyDevices {
-		cdiSpec.Devices = append(cdiSpec.Devices, cdiDevice(dev.GetPciAddr(), dev))
+	for _, alias := range aliases {
+		cdiSpec.Devices = append(cdiSpec.Devices, cdiDevice(alias.Name, alias.Device))
 	}
 
 	err := cdi.GetRegistry().SpecDB().WriteSpec(&cdiSpec, resourcePrefix+"_"+poolName)
@@ -127,43 +132,40 @@ func deviceName(poolName, pciAddr string) string {
 	return poolName + "_" + pciAddr
 }
 
-// ClaimLegacyDevices returns the devices whose legacy CDI device name, the PCI
-// address alone, the pool defines in its spec, and records them in claimed.
-//
-// Earlier versions named devices by PCI address only. Kubelet keeps the
-// annotations of existing allocations and reuses them when a container of an
-// existing Pod restarts, so these names have to stay resolvable after an
-// upgrade. Each legacy name is defined by exactly one pool, the first pool in
-// configuration order that selects the device, so that a device selected by
-// more than one pool does not get conflicting definitions. Call it for every
-// pool in configuration order with the same claimed map.
-func ClaimLegacyDevices(claimed map[string]bool, devices []types.PciNetDevice) []types.PciNetDevice {
-	var legacy []types.PciNetDevice
+// ClaimDeviceAliases assigns each saved device name to the first pool that
+// selects the device. An empty poolName claims PCI-only names from earlier
+// releases. Use the same claimed map across all pools of the CDI kind.
+func ClaimDeviceAliases(claimed map[string]bool, poolName string, devices []types.PciNetDevice) []DeviceAlias {
+	var aliases []DeviceAlias
 	for _, dev := range devices {
-		pciAddr := dev.GetPciAddr()
-		if claimed[pciAddr] {
+		name := dev.GetPciAddr()
+		if poolName != "" {
+			name = deviceName(poolName, name)
+		}
+		if claimed[name] {
 			continue
 		}
-		claimed[pciAddr] = true
-		legacy = append(legacy, dev)
+		claimed[name] = true
+		aliases = append(aliases, DeviceAlias{Name: name, Device: dev})
 	}
-	return legacy
+	return aliases
 }
 
 // CreateContainerAnnotations creates container annotations based on CDI spec for a container runtime
 func (c *impl) CreateContainerAnnotations(
-	devices []types.PciNetDevice, resourceNamePrefix, resourceKind, poolName string) (map[string]string, error) {
+	devices []types.PciNetDevice, resourceNamePrefix, resourceKind, poolName, annotationPoolName string,
+) (map[string]string, error) {
 	if len(devices) == 0 {
 		return nil, errors.New("devices list is empty")
 	}
-	if poolName == "" {
+	if poolName == "" || annotationPoolName == "" {
 		return nil, errors.New("pool name is empty")
 	}
 	annotations := make(map[string]string, 0)
 	// Kubelet merges annotations from every resource pool requested by a container.
 	// Identify the pool independently of its CDI kind, which multiple pools share.
 	// Hash the full resource name to keep the annotation name within 63 characters.
-	poolID := sha256.Sum256([]byte(resourceNamePrefix + "/" + poolName))
+	poolID := sha256.Sum256([]byte(resourceNamePrefix + "/" + annotationPoolName))
 	annoKey, err := cdi.AnnotationKey("rdmadp", base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(poolID[:]))
 	if err != nil {
 		log.Printf("can not create container annotation: %q", err)
