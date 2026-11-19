@@ -1,6 +1,6 @@
 module github.com/Mellanox/k8s-rdma-shared-dev-plugin
 
-go 1.26.0
+go 1.27.0
 
 require (
 	github.com/Mellanox/rdmamap v1.2.0
@@ -14,7 +14,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/vishvananda/netlink v1.3.1
 	google.golang.org/grpc v1.85.0
-	k8s.io/kubelet v0.36.6
+	k8s.io/kubelet v0.37.2
 )
 
 require (
@@ -29,7 +29,7 @@ require (
 	github.com/syndtr/gocapability v0.0.0-20200815063812-42c35b437635 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
+	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.60.0 // indirect
