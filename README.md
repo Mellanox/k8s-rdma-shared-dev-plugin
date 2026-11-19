@@ -185,9 +185,12 @@ CDI device names. They also keep their existing socket endpoints when the paths 
 limit. Pools with a shared resource name use separate CDI spec filenames, device names, and bounded
 socket identifiers. CDI specs keep aliases for saved allocations when their devices are still present.
 
-With CDI enabled, if a configuration change makes a resource name shared across prefixes or unique
-again, stop the outgoing plugin on each node before starting its replacement. The default DaemonSet
-rollout uses this order. It prevents both CDI filename layouts from being written at the same time.
+With CDI enabled, stop the outgoing plugin on each node before starting its replacement if a
+configuration change can move a CDI device name to another spec file. This includes switching
+between unique and shared resource names, reordering pools that select the same device, and adding,
+removing, or changing selectors for pools in a way that reassigns a compatibility alias. Overlapping
+writers can define the same name in two specs, making saved allocations unresolvable. The default
+DaemonSet rollout uses stop-before-start.
 
 
 ## Devices Selectors

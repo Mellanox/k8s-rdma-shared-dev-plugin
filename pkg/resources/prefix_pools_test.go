@@ -240,7 +240,7 @@ func assertPrefixAnnotation(t *testing.T, annotations map[string]string, expecte
 	return keys[0]
 }
 
-func assertPrefixReference(t *testing.T, registry cdiLib.Registry, name string, index int) {
+func assertPrefixReference(t *testing.T, registry cdiLib.Registry, name string, index int) *cdiLib.Device {
 	t.Helper()
 	device := registry.DeviceDB().GetDevice(name)
 	if device == nil {
@@ -262,6 +262,7 @@ func assertPrefixReference(t *testing.T, registry cdiLib.Registry, name string, 
 	if definitions != 1 {
 		t.Fatalf("qualified CDI name %s has %d definitions, want one", name, definitions)
 	}
+	return device
 }
 
 func assertPrefixPoolReferences(t *testing.T, registry cdiLib.Registry, name string, references map[string]int) {
@@ -536,6 +537,44 @@ func TestPrefixPoolIdentityAcrossConfigChanges(t *testing.T) {
 			for reference := range savedReferences {
 				assertPrefixReference(t, registry, reference, 0)
 			}
+		})
+	}
+}
+
+func TestOverlappingPrefixPoolsReorder(t *testing.T) {
+	registry := prefixCDIRegistry(t)
+	root := prefixSocketRoot(t)
+	const firstName, secondName = "a.example/hca", "b.example/hca"
+	first := prefixConfig("a.example", "hca", "ib0")
+	first.Selectors.IfNames = append(first.Selectors.IfNames, "ib1")
+	second := prefixConfig("b.example", "hca", "ib0")
+
+	for _, stage := range []struct {
+		name    string
+		configs []*types.UserConfig
+		owner   string
+	}{
+		{"before reorder", []*types.UserConfig{first, second}, firstName},
+		{"after reorder", []*types.UserConfig{second, first}, secondName},
+	} {
+		// The first subtest stops its writers before starting the reordered pools.
+		t.Run(stage.name, func(t *testing.T) {
+			rm := prefixManager(t, root, stage.configs, true)
+			allocatePrefixPools(t, rm, firstName)
+			if err := registry.Refresh(); err != nil {
+				t.Fatal(err)
+			}
+
+			wantSpec := cdiResourcePrefix + "_" + resourcePoolID(stage.owner) + ".yaml"
+			for _, ref := range []string{prefixReference("", 0), prefixReference("hca", 0)} {
+				device := assertPrefixReference(t, registry, ref, 0)
+				if got := filepath.Base(device.GetSpec().GetPath()); got != wantSpec {
+					t.Fatalf("CDI alias %s is defined in %s, want %s", ref, got, wantSpec)
+				}
+			}
+			assertPrefixReference(t, registry, prefixReference(resourcePoolID(firstName), 0), 0)
+			assertPrefixReference(t, registry, prefixReference(resourcePoolID(secondName), 0), 0)
+			assertPrefixReference(t, registry, prefixReference(resourcePoolID(firstName), 1), 1)
 		})
 	}
 }
