@@ -16,7 +16,10 @@
 
 ARG BASE_IMAGE_GO_DISTROLESS
 
-FROM golang:alpine as builder
+ARG BASE_IMAGE_GO_BUILDER_ALPINE=golang:alpine
+# The image tag comes from the central policy or the standalone ARG default.
+# hadolint ignore=DL3006
+FROM ${BASE_IMAGE_GO_BUILDER_ALPINE} as builder
 
 COPY . /usr/src/k8s-rdma-shared-dp
 
